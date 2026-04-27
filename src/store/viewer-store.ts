@@ -52,6 +52,8 @@ export interface HoverInfo {
   subtitle?: string;
   /** Body kind for icon styling. */
   kind: "star" | "planet" | "dso" | "constellation";
+  /** IAU 3-letter desig when this hover is over a constellation. */
+  conDesig?: string;
   /** Screen-space x in CSS pixels. */
   x: number;
   /** Screen-space y in CSS pixels. */
@@ -124,3 +126,16 @@ export const useViewer = create<ViewerState>((set) => ({
   nudgeFov: (delta) =>
     set((s) => ({ fovNudge: { delta, nonce: s.fovNudge.nonce + 1 } })),
 }));
+
+/**
+ * Returns the IAU desig (e.g. "Ori") of whichever constellation is currently
+ * being highlighted by either selection or hover. Selection wins so the user
+ * can hover other things without losing their pinned constellation.
+ */
+export function selectHighlightedConDesig(s: ViewerState): string | null {
+  if (s.selected?.id?.startsWith("CON_")) return s.selected.id.slice(4);
+  if (s.hover?.kind === "constellation" && s.hover.conDesig) {
+    return s.hover.conDesig;
+  }
+  return null;
+}

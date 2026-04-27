@@ -38,6 +38,7 @@ function ConstellationLabel({
               name: m.name,
               subtitle: `IAU ${m.desig}`,
               kind: "constellation",
+              conDesig: m.desig,
               x: e.clientX,
               y: e.clientY,
             });
@@ -48,6 +49,7 @@ function ConstellationLabel({
               name: m.name,
               subtitle: `IAU ${m.desig}`,
               kind: "constellation",
+              conDesig: m.desig,
               x: e.clientX,
               y: e.clientY,
             });

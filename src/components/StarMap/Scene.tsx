@@ -9,6 +9,7 @@ import { MilkyWay } from "./MilkyWay";
 import { ConstellationLines } from "./ConstellationLines";
 import { ConstellationBoundaries } from "./ConstellationBoundaries";
 import { ConstellationLabels } from "./ConstellationLabels";
+import { ConstellationHighlight } from "./ConstellationHighlight";
 import { Sun } from "./Sun";
 import { Planets } from "./Planets";
 import { DeepSkyObjects } from "./DeepSkyObjects";
@@ -62,6 +63,7 @@ export function Scene() {
       {stars && <Stars stars={stars} />}
       <ConstellationBoundaries />
       <ConstellationLines />
+      {stars && <ConstellationHighlight stars={stars} />}
       <ConstellationLabels />
       <DeepSkyObjects />
       <Suspense fallback={null}>

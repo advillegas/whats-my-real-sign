@@ -124,8 +124,9 @@ export function Hover({ stars, dso }: Props) {
           const m = meta.find((x) => x.desig === con.desig);
           setHover({
             name: m?.name ?? con.desig,
-            subtitle: "Constellation",
+            subtitle: `IAU ${con.desig}`,
             kind: "constellation",
+            conDesig: con.desig,
             x: e.clientX,
             y: e.clientY,
           });

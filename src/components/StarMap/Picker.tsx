@@ -13,6 +13,13 @@ import { Raycaster, Vector2, Vector3, type Object3D } from "three";
 import { raDecHoursToVec3 } from "@/lib/coordinates";
 import { useViewer } from "@/store/viewer-store";
 import type { StarRecord, DsoRecord } from "@/lib/catalogs";
+import {
+  constellationAt,
+  loadBoundaries,
+  loadMeta,
+  type ConstellationBoundary,
+  type ConstellationMeta,
+} from "@/lib/constellations";
 
 interface Props {
   stars: StarRecord[];
@@ -24,6 +31,20 @@ export function Picker({ stars, dso }: Props) {
   const downPos = useRef<{ x: number; y: number; t: number } | null>(null);
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
+  const boundsRef = useRef<ConstellationBoundary[] | null>(null);
+  const metaRef = useRef<ConstellationMeta[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([loadBoundaries(), loadMeta()]).then(([b, m]) => {
+      if (!alive) return;
+      boundsRef.current = b;
+      metaRef.current = m;
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const dom = gl.domElement;
@@ -55,41 +76,68 @@ export function Picker({ stars, dso }: Props) {
         if ((o as { isPoints?: boolean }).isPoints) targets.push(o);
       });
       const hits = raycaster.intersectObjects(targets, false);
-      if (hits.length === 0) return;
-      const hit = hits[0];
-      // Decide which catalog the hit belongs to by matching nearest record.
-      const v: Vector3 = hit.point.clone().normalize();
-      const bestStar = nearest(v, stars);
-      const bestDso = nearest(v, dso);
-      const useStar =
-        bestStar && (!bestDso || bestStar.angle < bestDso.angle);
-      if (useStar && bestStar) {
-        const s = bestStar.record;
-        setCameraTarget(s.ra, s.dec, 25);
-        setSelected({
-          id: s.id,
-          name: s.name ?? s.bf ?? s.id,
-          ra: s.ra,
-          dec: s.dec,
-          kind: "star",
-          mag: s.mag,
-          wikiTitle: s.name,
-          blurb: starBlurb(s),
-        });
-      } else if (bestDso) {
-        const d = bestDso.record;
-        setCameraTarget(d.ra, d.dec, 18);
-        setSelected({
-          id: d.id,
-          name: d.name ?? d.id,
-          ra: d.ra,
-          dec: d.dec,
-          kind: "dso",
-          mag: d.mag,
-          wikiTitle: d.m ? `Messier ${d.m}` : d.id,
-          blurb: dsoBlurb(d),
-        });
+
+      // 1) Try to land on a star or DSO point.
+      if (hits.length > 0) {
+        const hit = hits[0];
+        const v: Vector3 = hit.point.clone().normalize();
+        const bestStar = nearest(v, stars);
+        const bestDso = nearest(v, dso);
+        const useStar =
+          bestStar && (!bestDso || bestStar.angle < bestDso.angle);
+        if (useStar && bestStar && bestStar.angle < 0.012) {
+          const s = bestStar.record;
+          setCameraTarget(s.ra, s.dec, 25);
+          setSelected({
+            id: s.id,
+            name: s.name ?? s.bf ?? s.id,
+            ra: s.ra,
+            dec: s.dec,
+            kind: "star",
+            mag: s.mag,
+            wikiTitle: s.name,
+            blurb: starBlurb(s),
+          });
+          return;
+        }
+        if (bestDso && bestDso.angle < 0.018) {
+          const d = bestDso.record;
+          setCameraTarget(d.ra, d.dec, 18);
+          setSelected({
+            id: d.id,
+            name: d.name ?? d.id,
+            ra: d.ra,
+            dec: d.dec,
+            kind: "dso",
+            mag: d.mag,
+            wikiTitle: d.m ? `Messier ${d.m}` : d.id,
+            blurb: dsoBlurb(d),
+          });
+          return;
+        }
       }
+
+      // 2) Fall through to constellation: which IAU constellation contains
+      //    the click direction? This is essential on touch where hover
+      //    doesn't fire and there's no precise point to aim at.
+      const bounds = boundsRef.current;
+      const meta = metaRef.current;
+      if (!bounds || !meta) return;
+      const dir = raycaster.ray.direction.clone().normalize();
+      const raDec = vecToRaDec(dir);
+      const con = constellationAt(raDec.ra, raDec.dec, bounds);
+      if (!con) return;
+      const conMeta = meta.find((m) => m.desig === con.desig);
+      const name = conMeta?.name ?? con.desig;
+      setSelected({
+        id: `CON_${con.desig}`,
+        name,
+        ra: conMeta?.ra ?? raDec.ra,
+        dec: conMeta?.dec ?? raDec.dec,
+        kind: "constellation",
+        blurb: `IAU constellation ${con.desig}.`,
+        wikiTitle: name,
+      });
     };
     dom.addEventListener("pointerdown", onDown);
     dom.addEventListener("pointerup", onUp);
@@ -100,6 +148,14 @@ export function Picker({ stars, dso }: Props) {
   }, [gl, camera, scene, stars, dso, setSelected, setCameraTarget]);
 
   return null;
+}
+
+function vecToRaDec(v: Vector3): { ra: number; dec: number } {
+  const n = v.clone().normalize();
+  const dec = (Math.asin(Math.max(-1, Math.min(1, n.y))) * 180) / Math.PI;
+  let raRad = Math.atan2(n.z, n.x);
+  if (raRad < 0) raRad += Math.PI * 2;
+  return { ra: (raRad * 180) / Math.PI / 15, dec };
 }
 
 function nearest<T extends { ra: number; dec: number }>(

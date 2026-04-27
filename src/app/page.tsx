@@ -9,7 +9,6 @@ import { ObjectInfoPanel } from "@/components/ui/ObjectInfoPanel";
 import { SearchPalette } from "@/components/ui/SearchPalette";
 import { ApodCard } from "@/components/ui/ApodCard";
 import { HelpHint } from "@/components/ui/HelpHint";
-import { HoverLabel } from "@/components/ui/HoverLabel";
 import { ZoomControls } from "@/components/ui/ZoomControls";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
@@ -89,8 +88,6 @@ export default function Home() {
           <LayerToggles />
         </div>
       </div>
-
-      <HoverLabel />
 
       <div className="absolute bottom-0 inset-x-0 text-center text-[9px] sm:text-[10px] text-white/30 pointer-events-none z-0 hidden md:block px-2 pb-1 safe-bottom">
         Milky Way panorama:{" "}

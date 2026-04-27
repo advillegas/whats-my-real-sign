@@ -15,7 +15,6 @@ import { Planets } from "./Planets";
 import { DeepSkyObjects } from "./DeepSkyObjects";
 import { CameraRig } from "./CameraRig";
 import { Picker } from "./Picker";
-import { Hover } from "./Hover";
 import { loadStars, loadDeepSky, type StarRecord, type DsoRecord } from "@/lib/catalogs";
 
 function detectMobile(): boolean {
@@ -73,7 +72,6 @@ export function Scene() {
         <Planets />
       </Suspense>
       {stars && dso && <Picker stars={stars} dso={dso} />}
-      {stars && dso && <Hover stars={stars} dso={dso} />}
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
           intensity={isMobile ? 0.45 : 0.55}

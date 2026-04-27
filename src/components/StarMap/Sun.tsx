@@ -7,7 +7,7 @@
  * animated streaks and a soft outer falloff.
  */
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import {
@@ -115,12 +115,12 @@ export function Sun() {
   const date = useViewer((s) => s.date);
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
-  const setHover = useViewer((s) => s.setHover);
   const markInteracted = useViewer((s) => s.markInteracted);
   const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
   const sunTex = useLoader(TextureLoader, "/textures/sun.jpg");
   const surfaceRef = useRef<Mesh>(null);
   const coronaRef = useRef<Mesh>(null);
+  const [hot, setHot] = useState(false);
 
   const { sky, vec, surfaceMat, coronaMat } = useMemo(() => {
     const sk = sunSky(date);
@@ -181,39 +181,12 @@ export function Sun() {
     markInteracted();
   };
 
-  const onHoverIn = (e: {
-    clientX: number;
-    clientY: number;
-    pointerType?: string;
-    stopPropagation(): void;
-  }) => {
-    e.stopPropagation();
-    if (e.pointerType && e.pointerType !== "mouse" && e.pointerType !== "pen") return;
-    if (!tooltipsEnabled) return;
-    setHover({
-      name: "Sun",
-      subtitle: `${sky.dist.toFixed(3)} AU away`,
-      kind: "planet",
-      x: e.clientX,
-      y: e.clientY,
-    });
-    document.body.style.cursor = "pointer";
-  };
-  const onHoverOut = () => {
-    setHover(null);
-    document.body.style.cursor = "";
-  };
-
-  // Used to silence an unused-import warning if Color isn't referenced elsewhere.
   void Color;
 
   return (
     <group
       position={[vec.x, vec.y, vec.z]}
       onClick={onPick}
-      onPointerOver={onHoverIn}
-      onPointerMove={onHoverIn}
-      onPointerOut={onHoverOut}
     >
       <mesh ref={surfaceRef}>
         <sphereGeometry args={[SUN_RADIUS, 64, 64]} />
@@ -237,23 +210,29 @@ export function Sun() {
             markInteracted();
           }}
           onPointerEnter={() => {
+            setHot(true);
             if (tooltipsEnabled) selectSun();
           }}
+          onPointerLeave={() => setHot(false)}
           style={{
             fontFamily: "var(--font-sans, system-ui)",
             fontSize: 11,
-            fontWeight: 600,
+            fontWeight: hot ? 700 : 600,
             letterSpacing: "0.28em",
             textTransform: "uppercase",
-            color: "rgba(255, 230, 180, 0.95)",
+            color: hot
+              ? "rgba(255, 255, 230, 1)"
+              : "rgba(255, 230, 180, 0.95)",
             background: "transparent",
             border: "none",
             cursor: "pointer",
             padding: "2px 6px",
-            textShadow:
-              "0 0 8px rgba(0,0,0,0.9), 0 0 14px rgba(255, 180, 80, 0.55)",
+            textShadow: hot
+              ? "0 0 14px rgba(255, 220, 120, 0.9), 0 0 6px rgba(0,0,0,0.9)"
+              : "0 0 8px rgba(0,0,0,0.9), 0 0 14px rgba(255, 180, 80, 0.55)",
             whiteSpace: "nowrap",
             userSelect: "none",
+            transition: "color 120ms ease, text-shadow 120ms ease",
           }}
         >
           SUN

@@ -9,7 +9,7 @@
  * Saturn additionally renders a textured ring disc with the actual axial tilt.
  */
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import {
@@ -188,13 +188,12 @@ interface PlanetProps {
   style: PlanetStyle;
   onPick: (id: PlanetId, ra: number, dec: number, dist: number) => void;
   onSelect: (id: PlanetId, ra: number, dec: number, dist: number) => void;
-  onHoverIn: (id: PlanetId, dist: number, x: number, y: number) => void;
-  onHoverOut: () => void;
 }
 
-function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect, onHoverIn, onHoverOut }: PlanetProps) {
+function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect }: PlanetProps) {
   const groupRef = useRef<Group>(null);
   const sphereRef = useRef<Mesh>(null);
+  const [hot, setHot] = useState(false);
   const tex = useLoader(TextureLoader, style.texture);
   const ringTex = useLoader(TextureLoader, style.ring?.texture ?? "/textures/saturn_rings.jpg");
 
@@ -265,19 +264,6 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect, onHov
         e.stopPropagation();
         onPick(id, ra, dec, dist);
       }}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
-        onHoverIn(id, dist, e.clientX, e.clientY);
-      }}
-      onPointerMove={(e) => {
-        e.stopPropagation();
-        if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
-        onHoverIn(id, dist, e.clientX, e.clientY);
-      }}
-      onPointerOut={() => {
-        onHoverOut();
-      }}
     >
       <mesh ref={sphereRef}>
         <sphereGeometry args={[style.size, 64, 64]} />
@@ -300,21 +286,30 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect, onHov
             e.stopPropagation();
             onPick(id, ra, dec, dist);
           }}
-          onPointerEnter={() => onSelect(id, ra, dec, dist)}
+          onPointerEnter={() => {
+            setHot(true);
+            onSelect(id, ra, dec, dist);
+          }}
+          onPointerLeave={() => setHot(false)}
           style={{
             fontFamily: "var(--font-sans, system-ui)",
             fontSize: 10.5,
-            fontWeight: 500,
+            fontWeight: hot ? 600 : 500,
             letterSpacing: "0.2em",
             textTransform: "uppercase",
-            color: "rgba(255, 220, 170, 0.9)",
+            color: hot
+              ? "rgba(255, 240, 195, 1)"
+              : "rgba(255, 220, 170, 0.9)",
             background: "transparent",
             border: "none",
             cursor: "pointer",
             padding: "2px 4px",
-            textShadow: "0 0 6px rgba(0,0,0,0.85)",
+            textShadow: hot
+              ? "0 0 12px rgba(255, 220, 150, 0.8), 0 0 4px rgba(0,0,0,0.85)"
+              : "0 0 6px rgba(0,0,0,0.85)",
             whiteSpace: "nowrap",
             userSelect: "none",
+            transition: "color 120ms ease, text-shadow 120ms ease",
           }}
         >
           {id}
@@ -329,7 +324,6 @@ export function Planets() {
   const visible = useViewer((s) => s.layers.planets);
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
-  const setHover = useViewer((s) => s.setHover);
   const markInteracted = useViewer((s) => s.markInteracted);
   const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
 
@@ -373,22 +367,6 @@ export function Planets() {
     markInteracted();
   };
 
-  const onHoverIn = (id: PlanetId, dist: number, x: number, y: number) => {
-    if (!tooltipsEnabled) return;
-    setHover({
-      name: id,
-      subtitle: `${dist.toFixed(3)} AU away`,
-      kind: "planet",
-      x,
-      y,
-    });
-    document.body.style.cursor = "pointer";
-  };
-  const onHoverOut = () => {
-    setHover(null);
-    document.body.style.cursor = "";
-  };
-
   return (
     <group>
       {positions.map((p) => {
@@ -406,8 +384,6 @@ export function Planets() {
             style={style}
             onPick={onPick}
             onSelect={onHoverSelect}
-            onHoverIn={onHoverIn}
-            onHoverOut={onHoverOut}
           />
         );
       })}

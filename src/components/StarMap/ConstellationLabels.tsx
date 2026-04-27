@@ -34,38 +34,28 @@ function ConstellationLabel({
         style={{ pointerEvents: "auto" }}
       >
         <button
-          onPointerEnter={(e) => {
+          onPointerEnter={() => {
             setHot(true);
-            if (!tooltipsEnabled) return;
             setHover({
               name: m.name,
               subtitle: `IAU ${m.desig}`,
               kind: "constellation",
               conDesig: m.desig,
-              x: e.clientX,
-              y: e.clientY,
+              x: 0,
+              y: 0,
             });
-            setSelected({
-              id: `CON_${m.desig}`,
-              name: m.name,
-              ra: m.ra,
-              dec: m.dec,
-              kind: "constellation",
-              blurb: `IAU constellation ${m.desig}.`,
-              wikiTitle: m.name,
-            });
+            if (tooltipsEnabled) {
+              setSelected({
+                id: `CON_${m.desig}`,
+                name: m.name,
+                ra: m.ra,
+                dec: m.dec,
+                kind: "constellation",
+                blurb: `IAU constellation ${m.desig}.`,
+                wikiTitle: m.name,
+              });
+            }
             document.body.style.cursor = "pointer";
-          }}
-          onPointerMove={(e) => {
-            if (!tooltipsEnabled) return;
-            setHover({
-              name: m.name,
-              subtitle: `IAU ${m.desig}`,
-              kind: "constellation",
-              conDesig: m.desig,
-              x: e.clientX,
-              y: e.clientY,
-            });
           }}
           onPointerLeave={() => {
             setHot(false);

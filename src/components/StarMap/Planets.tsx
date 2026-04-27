@@ -330,6 +330,7 @@ export function Planets() {
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const setHover = useViewer((s) => s.setHover);
+  const markInteracted = useViewer((s) => s.markInteracted);
 
   const { positions, sunVec } = useMemo(() => {
     const all = allBodySky(date);
@@ -363,6 +364,7 @@ export function Planets() {
   const onPick = (id: PlanetId, ra: number, dec: number, dist: number) => {
     setCameraTarget(ra, dec, 22);
     onSelect(id, ra, dec, dist);
+    markInteracted();
   };
 
   const onHoverIn = (id: PlanetId, dist: number, x: number, y: number) => {

@@ -58,6 +58,7 @@ export function CameraRig() {
   const targetState = useViewer((s) => s.cameraTarget);
   const fovNudge = useViewer((s) => s.fovNudge);
   const setAnimating = useViewer((s) => s.setAnimating);
+  const markInteracted = useViewer((s) => s.markInteracted);
 
   useEffect(() => {
     if (!camera) return;
@@ -86,6 +87,7 @@ export function CameraRig() {
       if (e.button !== 0 && e.pointerType === "mouse") return;
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       tween.current = null;
+      markInteracted();
       try {
         dom.setPointerCapture(e.pointerId);
       } catch {
@@ -158,6 +160,7 @@ export function CameraRig() {
       const factor = Math.exp(e.deltaY * 0.0015);
       cam.fov = clamp(cam.fov * factor, MIN_FOV, MAX_FOV);
       cam.updateProjectionMatrix();
+      markInteracted();
       e.preventDefault();
     };
 
@@ -229,12 +232,12 @@ export function CameraRig() {
     if (!("fov" in camera)) return;
     const cam = camera as { fov: number; updateProjectionMatrix: () => void };
     if (Number.isNaN(fovNudge.delta) || fovNudge.delta === 0) {
-      // Sentinel: reset.
       cam.fov = 55;
     } else {
       cam.fov = clamp(cam.fov * Math.exp(fovNudge.delta), MIN_FOV, MAX_FOV);
     }
     cam.updateProjectionMatrix();
+    markInteracted();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fovNudge.nonce]);
 

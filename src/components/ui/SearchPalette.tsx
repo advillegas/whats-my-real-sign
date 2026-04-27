@@ -18,6 +18,7 @@ export function SearchPalette() {
   const date = useViewer((s) => s.date);
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
+  const markInteracted = useViewer((s) => s.markInteracted);
 
   useEffect(() => {
     Promise.all([loadStars(), loadDeepSky(), loadMeta()]).then(([s, d, m]) => {
@@ -74,6 +75,7 @@ export function SearchPalette() {
       kind: entry.kind,
       wikiTitle: entry.wikiTitle,
     });
+    markInteracted();
     setOpen(false);
   };
 

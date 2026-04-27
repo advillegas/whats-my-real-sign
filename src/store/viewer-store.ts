@@ -77,6 +77,8 @@ interface ViewerState {
   isAnimating: boolean;
   /** Requested FOV change to be applied by CameraRig (positive = zoom out). */
   fovNudge: { delta: number; nonce: number };
+  /** True once the user has manually navigated (drag, scroll, pinch, click, search). */
+  hasInteracted: boolean;
 
   setDate: (d: Date) => void;
   setCurrentJdDate: (d: Date) => void;
@@ -86,6 +88,7 @@ interface ViewerState {
   toggleLayer: (l: LayerToggle) => void;
   setAnimating: (v: boolean) => void;
   nudgeFov: (delta: number) => void;
+  markInteracted: () => void;
 }
 
 const today = new Date();
@@ -107,7 +110,8 @@ export const useViewer = create<ViewerState>((set) => ({
   },
   isAnimating: false,
   fovNudge: { delta: 0, nonce: 0 },
-  setDate: (d) => set({ requestedDate: d }),
+  hasInteracted: false,
+  setDate: (d) => set({ requestedDate: d, hasInteracted: true }),
   setCurrentJdDate: (d) => set({ date: d }),
   setCameraTarget: (raHours, decDeg, fovDeg) =>
     set((s) => ({
@@ -118,13 +122,16 @@ export const useViewer = create<ViewerState>((set) => ({
         nonce: s.cameraTarget.nonce + 1,
       },
     })),
-  setSelected: (s) => set({ selected: s }),
+  setSelected: (sel) => set({ selected: sel }),
   setHover: (h) => set({ hover: h }),
   toggleLayer: (l) =>
     set((s) => ({ layers: { ...s.layers, [l]: !s.layers[l] } })),
   setAnimating: (v) => set({ isAnimating: v }),
   nudgeFov: (delta) =>
     set((s) => ({ fovNudge: { delta, nonce: s.fovNudge.nonce + 1 } })),
+  markInteracted: () => {
+    if (!useViewer.getState().hasInteracted) set({ hasInteracted: true });
+  },
 }));
 
 /**

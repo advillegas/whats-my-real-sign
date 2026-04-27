@@ -17,6 +17,7 @@ function ConstellationLabel({
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const setHover = useViewer((s) => s.setHover);
+  const markInteracted = useViewer((s) => s.markInteracted);
   const [hot, setHot] = useState(false);
   const fontSize = m.rank === "1" ? 14 : m.rank === "2" ? 12 : 10.5;
   const baseOpacity = m.rank === "1" ? 0.95 : m.rank === "2" ? 0.78 : 0.55;
@@ -79,6 +80,7 @@ function ConstellationLabel({
               blurb: `IAU constellation ${m.desig}.`,
               wikiTitle: m.name,
             });
+            markInteracted();
           }}
           style={{
             fontFamily: "var(--font-sans, system-ui)",

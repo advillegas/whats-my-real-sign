@@ -117,6 +117,7 @@ export function Sun() {
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const setHover = useViewer((s) => s.setHover);
+  const markInteracted = useViewer((s) => s.markInteracted);
   const sunTex = useLoader(TextureLoader, "/textures/sun.jpg");
   const surfaceRef = useRef<Mesh>(null);
   const coronaRef = useRef<Mesh>(null);
@@ -177,6 +178,7 @@ export function Sun() {
     e.stopPropagation();
     setCameraTarget(sky.ra, sky.dec, 28);
     selectSun();
+    markInteracted();
   };
 
   const onHoverIn = (e: {
@@ -231,6 +233,7 @@ export function Sun() {
             e.stopPropagation();
             setCameraTarget(sky.ra, sky.dec, 28);
             selectSun();
+            markInteracted();
           }}
           onPointerEnter={() => selectSun()}
           style={{

@@ -11,6 +11,7 @@ import { ApodCard } from "@/components/ui/ApodCard";
 import { HelpHint } from "@/components/ui/HelpHint";
 import { HoverLabel } from "@/components/ui/HoverLabel";
 import { ZoomControls } from "@/components/ui/ZoomControls";
+import { WelcomeOverlay } from "@/components/ui/WelcomeOverlay";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
 
@@ -79,6 +80,8 @@ export default function Home() {
       </div>
 
       <HoverLabel />
+
+      <WelcomeOverlay />
 
       <div className="absolute bottom-0 inset-x-0 text-center text-[9px] sm:text-[10px] text-white/30 pointer-events-none z-0 hidden md:block px-2 pb-1 safe-bottom">
         Milky Way panorama:{" "}

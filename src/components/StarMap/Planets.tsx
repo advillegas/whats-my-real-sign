@@ -186,9 +186,11 @@ interface PlanetProps {
   sunVec: Vector3;
   style: PlanetStyle;
   onPick: (id: PlanetId, ra: number, dec: number, dist: number) => void;
+  onHoverIn: (id: PlanetId, dist: number, x: number, y: number) => void;
+  onHoverOut: () => void;
 }
 
-function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick }: PlanetProps) {
+function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHoverOut }: PlanetProps) {
   const groupRef = useRef<Group>(null);
   const sphereRef = useRef<Mesh>(null);
   const tex = useLoader(TextureLoader, style.texture);
@@ -261,6 +263,18 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick }: PlanetProps) 
         e.stopPropagation();
         onPick(id, ra, dec, dist);
       }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        onHoverIn(id, dist, e.clientX, e.clientY);
+      }}
+      onPointerMove={(e) => {
+        e.stopPropagation();
+        onHoverIn(id, dist, e.clientX, e.clientY);
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation();
+        onHoverOut();
+      }}
     >
       <mesh ref={sphereRef}>
         <sphereGeometry args={[style.size, 64, 64]} />
@@ -299,6 +313,7 @@ export function Planets() {
   const visible = useViewer((s) => s.layers.planets);
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
+  const setHover = useViewer((s) => s.setHover);
 
   const { positions, sunVec } = useMemo(() => {
     const all = allBodySky(date);
@@ -330,6 +345,21 @@ export function Planets() {
     });
   };
 
+  const onHoverIn = (id: PlanetId, dist: number, x: number, y: number) => {
+    setHover({
+      name: id,
+      subtitle: `${dist.toFixed(3)} AU away`,
+      kind: "planet",
+      x,
+      y,
+    });
+    document.body.style.cursor = "pointer";
+  };
+  const onHoverOut = () => {
+    setHover(null);
+    document.body.style.cursor = "";
+  };
+
   return (
     <group>
       {positions.map((p) => {
@@ -346,6 +376,8 @@ export function Planets() {
             sunVec={sunVec}
             style={style}
             onPick={onPick}
+            onHoverIn={onHoverIn}
+            onHoverOut={onHoverOut}
           />
         );
       })}

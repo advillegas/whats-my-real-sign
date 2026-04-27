@@ -9,6 +9,8 @@ import { ObjectInfoPanel } from "@/components/ui/ObjectInfoPanel";
 import { SearchPalette } from "@/components/ui/SearchPalette";
 import { ApodCard } from "@/components/ui/ApodCard";
 import { HelpHint } from "@/components/ui/HelpHint";
+import { HoverLabel } from "@/components/ui/HoverLabel";
+import { ZoomControls } from "@/components/ui/ZoomControls";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
 
@@ -69,10 +71,13 @@ export default function Home() {
         <div className="pointer-events-auto flex flex-col items-center gap-3">
           <HelpHint />
         </div>
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto flex items-end gap-2">
+          <ZoomControls />
           <LayerToggles />
         </div>
       </div>
+
+      <HoverLabel />
 
       <div className="absolute bottom-1 inset-x-0 text-center text-[10px] text-white/30 pointer-events-none z-0">
         Milky Way panorama:{" "}

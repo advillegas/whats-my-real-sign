@@ -45,6 +45,19 @@ export interface CameraTarget {
   nonce: number;
 }
 
+export interface HoverInfo {
+  /** Display name. */
+  name: string;
+  /** Optional secondary line (constellation, designation, etc.). */
+  subtitle?: string;
+  /** Body kind for icon styling. */
+  kind: "star" | "planet" | "dso" | "constellation";
+  /** Screen-space x in CSS pixels. */
+  x: number;
+  /** Screen-space y in CSS pixels. */
+  y: number;
+}
+
 interface ViewerState {
   /** Currently displayed Julian Date (as JS Date). */
   date: Date;
@@ -54,17 +67,23 @@ interface ViewerState {
   cameraTarget: CameraTarget;
   /** Currently selected object, if any. */
   selected: SelectedObject | null;
+  /** Currently hovered object, if any. */
+  hover: HoverInfo | null;
   /** Layer visibility toggles. */
   layers: Record<LayerToggle, boolean>;
   /** Are we currently animating to a new target/date? */
   isAnimating: boolean;
+  /** Requested FOV change to be applied by CameraRig (positive = zoom out). */
+  fovNudge: { delta: number; nonce: number };
 
   setDate: (d: Date) => void;
   setCurrentJdDate: (d: Date) => void;
   setCameraTarget: (raHours: number, decDeg: number, fovDeg?: number) => void;
   setSelected: (s: SelectedObject | null) => void;
+  setHover: (h: HoverInfo | null) => void;
   toggleLayer: (l: LayerToggle) => void;
   setAnimating: (v: boolean) => void;
+  nudgeFov: (delta: number) => void;
 }
 
 const today = new Date();
@@ -74,6 +93,7 @@ export const useViewer = create<ViewerState>((set) => ({
   requestedDate: today,
   cameraTarget: { raHours: 0, decDeg: 0, nonce: 0 },
   selected: null,
+  hover: null,
   layers: {
     stars: true,
     lines: true,
@@ -84,6 +104,7 @@ export const useViewer = create<ViewerState>((set) => ({
     dso: true,
   },
   isAnimating: false,
+  fovNudge: { delta: 0, nonce: 0 },
   setDate: (d) => set({ requestedDate: d }),
   setCurrentJdDate: (d) => set({ date: d }),
   setCameraTarget: (raHours, decDeg, fovDeg) =>
@@ -96,7 +117,10 @@ export const useViewer = create<ViewerState>((set) => ({
       },
     })),
   setSelected: (s) => set({ selected: s }),
+  setHover: (h) => set({ hover: h }),
   toggleLayer: (l) =>
     set((s) => ({ layers: { ...s.layers, [l]: !s.layers[l] } })),
   setAnimating: (v) => set({ isAnimating: v }),
+  nudgeFov: (delta) =>
+    set((s) => ({ fovNudge: { delta, nonce: s.fovNudge.nonce + 1 } })),
 }));

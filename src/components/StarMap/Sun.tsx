@@ -115,6 +115,7 @@ export function Sun() {
   const date = useViewer((s) => s.date);
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
+  const setHover = useViewer((s) => s.setHover);
   const sunTex = useLoader(TextureLoader, "/textures/sun.jpg");
   const surfaceRef = useRef<Mesh>(null);
   const coronaRef = useRef<Mesh>(null);
@@ -173,11 +174,33 @@ export function Sun() {
     });
   };
 
+  const onHoverIn = (e: { clientX: number; clientY: number; stopPropagation(): void }) => {
+    e.stopPropagation();
+    setHover({
+      name: "Sun",
+      subtitle: `${sky.dist.toFixed(3)} AU away`,
+      kind: "planet",
+      x: e.clientX,
+      y: e.clientY,
+    });
+    document.body.style.cursor = "pointer";
+  };
+  const onHoverOut = () => {
+    setHover(null);
+    document.body.style.cursor = "";
+  };
+
   // Used to silence an unused-import warning if Color isn't referenced elsewhere.
   void Color;
 
   return (
-    <group position={[vec.x, vec.y, vec.z]} onClick={onPick}>
+    <group
+      position={[vec.x, vec.y, vec.z]}
+      onClick={onPick}
+      onPointerOver={onHoverIn}
+      onPointerMove={onHoverIn}
+      onPointerOut={onHoverOut}
+    >
       <mesh ref={surfaceRef}>
         <sphereGeometry args={[SUN_RADIUS, 64, 64]} />
         <primitive object={surfaceMat} attach="material" />

@@ -54,6 +54,7 @@ export function CameraRig() {
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const targetState = useViewer((s) => s.cameraTarget);
+  const fovNudge = useViewer((s) => s.fovNudge);
   const setAnimating = useViewer((s) => s.setAnimating);
 
   useEffect(() => {
@@ -154,6 +155,21 @@ export function CameraRig() {
     setAnimating(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetState.nonce]);
+
+  // Apply external FOV nudges (zoom buttons / keyboard shortcuts).
+  useEffect(() => {
+    if (fovNudge.nonce === 0) return;
+    if (!("fov" in camera)) return;
+    const cam = camera as { fov: number; updateProjectionMatrix: () => void };
+    if (Number.isNaN(fovNudge.delta) || fovNudge.delta === 0) {
+      // Sentinel: reset.
+      cam.fov = 55;
+    } else {
+      cam.fov = clamp(cam.fov * Math.exp(fovNudge.delta), MIN_FOV, MAX_FOV);
+    }
+    cam.updateProjectionMatrix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fovNudge.nonce]);
 
   useFrame(() => {
     if (tween.current) {

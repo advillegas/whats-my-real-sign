@@ -53,8 +53,11 @@ void main() {
 `;
 
 /**
- * Three-hash GLSL pseudo-random functions (Dave Hoskins style). Quality is
- * good enough that we get no obvious banding/regularity at any zoom.
+ * Each octave checks the 3×3 cell neighborhood around the fragment so star
+ * Gaussians don't get clipped at cell boundaries. Per-cell hash decides
+ * whether a star exists, jitter position, brightness (Pareto-ish), and
+ * colour (cool/warm). Star spatial radius is ~0.35 cells so they comfortably
+ * span 2–4 pixels at the FOVs where each octave is meant to dominate.
  */
 const FS = /* glsl */ `
 precision highp float;
@@ -73,14 +76,12 @@ float hash13(vec3 p3) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
-vec3 octave(vec3 d, float cells, float densityProb, float gauss, float bias, float milky, float seed) {
-  // Cube projection: pick the dominant axis face and use the other two as 2D
-  // coords. This keeps cell areas roughly uniform across the sphere (much
-  // closer to equal-area than naive lon/lat which pinches at the poles).
+// Cube projection: pick the dominant axis face and use the other two as 2D
+// coords. This keeps cell areas roughly uniform across the sphere — much
+// closer to equal-area than naive lon/lat which pinches at the poles.
+void cubeProject(vec3 d, out vec2 uv, out float faceId) {
   vec3 absD = abs(d);
   float maxC = max(absD.x, max(absD.y, absD.z));
-  vec2 uv;
-  float faceId;
   if (absD.x >= maxC - 1e-5) {
     uv = d.yz / max(absD.x, 1e-4);
     faceId = d.x > 0.0 ? 1.0 : 2.0;
@@ -91,37 +92,52 @@ vec3 octave(vec3 d, float cells, float densityProb, float gauss, float bias, flo
     uv = d.xy / max(absD.z, 1e-4);
     faceId = d.z > 0.0 ? 5.0 : 6.0;
   }
+}
 
-  vec2 cell = floor(uv * cells);
-  vec2 frac = uv * cells - cell - 0.5;
+vec3 octave(vec2 uv, float faceId, float cells, float densityProb, float radius, float bias, float milky, float seed) {
+  vec2 cellPos = uv * cells;
+  vec2 baseCell = floor(cellPos);
 
-  vec3 seedV = vec3(cell, faceId * 19.0 + seed);
-  float r1 = hash13(seedV);
-  if (r1 > densityProb) return vec3(0.0);
+  vec3 acc = vec3(0.0);
+  for (float dy = -1.0; dy <= 1.0; dy += 1.0) {
+    for (float dx = -1.0; dx <= 1.0; dx += 1.0) {
+      vec2 cell = baseCell + vec2(dx, dy);
+      vec3 seedV = vec3(cell, faceId * 19.0 + seed);
+      float r1 = hash13(seedV);
+      if (r1 > densityProb) continue;
 
-  vec2 jitter = vec2(hash13(seedV + 7.0), hash13(seedV + 13.0)) - 0.5;
-  vec2 dPos = frac - jitter * 0.7;
-  float r2 = dot(dPos, dPos);
+      // Random star position within its cell (fully inside, not jittered to edges).
+      vec2 starOff = vec2(hash13(seedV + 7.0), hash13(seedV + 13.0));
+      vec2 starPos = cell + starOff * 0.7 + vec2(0.15);
+      float dist = length(cellPos - starPos);
 
-  // Brightness Pareto-distributed: most are very faint, a few stand out.
-  float power = pow(hash13(seedV + 19.0), 7.0);
+      // Brightness Pareto: most are mid, a few stand out. Exponent 4 ≫ 7 in
+      // the previous version so far more stars are perceptibly bright.
+      float power = pow(hash13(seedV + 19.0), 4.0);
 
-  // Color tint along blackbody-ish axis (cool→hot)
-  float t = hash13(seedV + 23.0);
-  vec3 color = mix(vec3(0.85, 0.95, 1.10), vec3(1.10, 0.95, 0.78), t);
+      float t = hash13(seedV + 23.0);
+      vec3 color = mix(vec3(0.78, 0.92, 1.18), vec3(1.20, 0.95, 0.72), t);
 
-  // Density modulation by galactic plane brightness.
-  float density = bias + (1.0 - bias) * milky;
+      // Soft Gaussian core + sharper inner peak for crisp "dot" feel.
+      float r2 = (dist / radius);
+      r2 = r2 * r2;
+      float core = exp(-r2 * 4.5);
+      float peak = exp(-r2 * 18.0);
+      float falloff = core * 0.55 + peak * 0.85;
 
-  return color * exp(-r2 * gauss) * power * density;
+      float density = bias + (1.0 - bias) * milky;
+      acc += color * falloff * power * density;
+    }
+  }
+  return acc;
 }
 
 void main() {
   vec3 d = normalize(vDir);
 
-  // Visibility ramp: all-sky → constellation → close. Starts fading in at
-  // 60° FOV, fully visible by 25°. Fully discarded above 60° to save fill.
-  float zoomFade = smoothstep(60.0, 25.0, uFov);
+  // Visibility ramp: starts fading in at 80° FOV (very modest zoom), fully
+  // present by 25°. Above 80° we discard to save fill.
+  float zoomFade = smoothstep(80.0, 25.0, uFov);
   if (zoomFade <= 0.001) discard;
 
   // Galactic plane luminance from Milky Way panorama (normalised 0..1).
@@ -134,16 +150,31 @@ void main() {
     float v = 0.5 + lat / 3.1415927;
     vec3 c = texture2D(uMilkyTex, vec2(u, v)).rgb;
     float l = dot(c, vec3(0.299, 0.587, 0.114));
-    milky = clamp(pow(l * 1.5, 1.4), 0.0, 1.0);
+    milky = clamp(pow(l * 1.6, 1.3), 0.0, 1.0);
   }
 
+  vec2 uv;
+  float faceId;
+  cubeProject(d, uv, faceId);
+
+  // Per-octave brightness ramps so each tier dominates at its target zoom:
+  //  - coarse stars are visible from 80° FOV down (already strong by 50°)
+  //  - mid stars come in around 50° → 25°
+  //  - fine deep field comes in around 30° → 12°
+  float coarseFade = smoothstep(80.0, 40.0, uFov);
+  float midFade    = smoothstep(55.0, 25.0, uFov);
+  float fineFade   = smoothstep(35.0, 12.0, uFov);
+
   vec3 acc = vec3(0.0);
-  // Coarse octave: brighter, sparser, ~tens of thousands of stars across sky.
-  acc += octave(d, 1000.0, 0.045, 280.0, 0.45, milky, 1.0);
-  // Mid octave: ~hundreds of thousands of fainter stars.
-  acc += octave(d, 2500.0, 0.030, 600.0, 0.35, milky, 2.0);
-  // Fine octave: ~millions of barely-visible micro-stars; the "deep field" feel.
-  acc += octave(d, 6000.0, 0.022, 1300.0, 0.25, milky, 3.0);
+  // Coarse: ~9k cells/face × 6 faces × 0.07 prob ≈ 38k bright "extras".
+  acc += octave(uv, faceId,  300.0, 0.07, 0.30, 0.45, milky, 1.0) * 1.8 * coarseFade;
+  // Mid: ~810k cells × 0.05 prob ≈ 240k mid-bright stars.
+  acc += octave(uv, faceId,  900.0, 0.05, 0.32, 0.35, milky, 2.0) * 1.5 * midFade;
+  // Fine: ~22M cells × 0.04 prob ≈ 5.3M fine "deep field" stars.
+  acc += octave(uv, faceId, 3000.0, 0.04, 0.34, 0.30, milky, 3.0) * 1.2 * fineFade;
+  // Ultra: ~140M cells × 0.03 prob ≈ 25M faint micro-stars at extreme zoom.
+  acc += octave(uv, faceId, 7500.0, 0.03, 0.36, 0.25, milky, 4.0) * 0.9
+         * smoothstep(22.0, 12.0, uFov);
 
   gl_FragColor = vec4(acc * zoomFade, 1.0);
 }

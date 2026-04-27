@@ -78,14 +78,15 @@ void main() {
   gl_Position = projectionMatrix * mv;
   float dist = -mv.z;
 
-  // FOV-driven size: grow stars as the user zooms in (smaller FOV → bigger sprite).
-  // 55° is the rest FOV; 12° is closest zoom.
-  float fovSizeBoost = clamp(55.0 / max(uFov, 6.0), 0.7, 2.6);
+  // FOV-driven size: grow stars as the user zooms in (smaller FOV → bigger
+  // sprite). 55° is rest FOV, 12° is closest zoom. Uncapped on the upper end
+  // so deep zoom genuinely resolves the star sprite into pixels — otherwise
+  // every star is a 1-px bloom blob, which reads as "blurry" at any zoom.
+  float fovSizeBoost = clamp(pow(55.0 / max(uFov, 6.0), 1.15), 0.7, 6.0);
   float sz = starSize * uSizeScale * fovSizeBoost * uPixelRatio
              * (uViewportHeight / max(dist, 1.0));
-  // visAlpha smoothly fades the star's size as it approaches its visibility floor.
   sz *= visAlpha;
-  gl_PointSize = clamp(sz, 1.0, 96.0);
+  gl_PointSize = clamp(sz, 1.0, 256.0);
 }
 `;
 
@@ -177,7 +178,7 @@ export function Stars({ stars }: StarsProps) {
       uniforms: {
         uPixelRatio: { value: gl.getPixelRatio() },
         uViewportHeight: { value: size.height },
-        uSizeScale: { value: 0.014 },
+        uSizeScale: { value: 0.022 },
         uFov: { value: 55 },
         uVisFloor: { value: VIS_FLOOR_AT_MAX_FOV },
         uVisCeil: { value: VIS_FLOOR_AT_MIN_FOV },

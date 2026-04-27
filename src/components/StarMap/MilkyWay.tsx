@@ -12,7 +12,7 @@
  * inside-viewing flip we get a one-to-one match against the J2000 sphere.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   BackSide,
   ClampToEdgeWrapping,
@@ -23,7 +23,7 @@ import {
   TextureLoader,
   SRGBColorSpace,
 } from "three";
-import { useLoader, useThree } from "@react-three/fiber";
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { useViewer } from "@/store/viewer-store";
 import { CELESTIAL_RADIUS } from "@/lib/coordinates";
 
@@ -42,11 +42,12 @@ void main() {
 
 /*
  * The fragment shader does the texture lookup in galactic coordinates with
- * mipmap+anisotropic filtering, plus a small high-frequency procedural
- * "dust grain" perturbation that keeps the panorama from going visibly
- * smooth/blurry when the user zooms in past the texture's native angular
- * resolution. The grain is amplitude-modulated by local panorama luminance
- * so it lives in the bright Milky Way regions and disappears in dark sky.
+ * mipmap+anisotropic filtering, then ramps in three octaves of high-frequency
+ * procedural "dust grain" — sampled in 3D direction space so it tiles
+ * seamlessly across the sphere — that intensify with zoom. This keeps the
+ * panorama from looking visibly smooth/blurry past the 6Kx3K source's native
+ * angular resolution. Grain amplitude is modulated by local luminance so it
+ * lives in the bright Milky Way and disappears in dark sky.
  */
 const FS = /* glsl */ `
 precision highp float;
@@ -56,6 +57,7 @@ uniform vec3 uGalX;
 uniform vec3 uGalY;
 uniform vec3 uGalZ;
 uniform float uIntensity;
+uniform float uFov;
 
 float hash13(vec3 p3) {
   p3 = fract(p3 * 0.1031);
@@ -82,6 +84,14 @@ float vnoise(vec3 p) {
   );
 }
 
+float fbm(vec3 p) {
+  float v = 0.0;
+  v += (vnoise(p * 1.0) - 0.5);
+  v += (vnoise(p * 2.0) - 0.5) * 0.5;
+  v += (vnoise(p * 4.1) - 0.5) * 0.25;
+  return v;
+}
+
 void main() {
   vec3 d = normalize(vDir);
   vec3 g = vec3(dot(uGalX, d), dot(uGalY, d), dot(uGalZ, d));
@@ -94,15 +104,29 @@ void main() {
   vec3 col = texture2D(uTex, vec2(u, v)).rgb;
   col = pow(col, vec3(1.15));
 
-  // High-frequency procedural grain so the texture doesn't look smooth at
-  // close zooms. Two octaves of value noise sampled in 3D so it tiles
-  // seamlessly across the sphere.
+  // Local luminance gates the grain into bright regions only.
   float lum = dot(col, vec3(0.299, 0.587, 0.114));
-  float grain = 0.0;
-  grain += (vnoise(d * 800.0) - 0.5) * 0.15;
-  grain += (vnoise(d * 2400.0) - 0.5) * 0.10;
-  // Modulate grain by luminance so dark sky stays dark.
-  col += vec3(grain) * smoothstep(0.05, 0.45, lum);
+  float lumGate = smoothstep(0.04, 0.40, lum);
+
+  // Grain intensity ramps with zoom so wide views aren't noisy and close
+  // views break up the smooth-stretched texture pixels.
+  float grainAmp = mix(0.4, 1.0, smoothstep(70.0, 18.0, uFov));
+
+  // Big-scale dust patches (filaments / dark-cloud structure).
+  float dust = fbm(d * 8.0) * 1.2 + fbm(d * 24.0) * 0.6;
+  // Mid-scale grain.
+  float midGrain = (vnoise(d * 220.0) - 0.5) * 0.55
+                 + (vnoise(d * 700.0) - 0.5) * 0.40;
+  // Pixel-scale grain only at deep zoom — keeps texels from looking like a
+  // smooth stretched bitmap when the user zooms past native resolution.
+  float fineGrain = ((vnoise(d * 2200.0) - 0.5) * 0.35
+                  +  (vnoise(d * 6500.0) - 0.5) * 0.28)
+                  * smoothstep(45.0, 12.0, uFov);
+
+  float perturb = (dust * 0.05 + midGrain + fineGrain) * grainAmp * lumGate;
+  // Modulate the panorama colour rather than just adding a grey grain so
+  // the stars-of-the-milky-way feel is preserved (warm grain in warm areas).
+  col *= 1.0 + perturb;
 
   gl_FragColor = vec4(col * uIntensity, 1.0);
 }
@@ -112,10 +136,15 @@ interface MilkyWayProps {
   quality?: "low" | "high";
 }
 
+interface CameraWithFov {
+  fov?: number;
+}
+
 export function MilkyWay({ quality = "high" }: MilkyWayProps) {
   const visible = useViewer((s) => s.layers.milkyway);
   const tex = useLoader(TextureLoader, "/textures/eso_milkyway.jpg");
-  const { gl } = useThree();
+  const { gl, camera } = useThree();
+  const matRef = useRef<ShaderMaterial | null>(null);
 
   const { geometry, material } = useMemo(() => {
     tex.colorSpace = SRGBColorSpace;
@@ -144,10 +173,21 @@ export function MilkyWay({ quality = "high" }: MilkyWayProps) {
         uGalY: { value: GAL_Y },
         uGalZ: { value: GAL_Z },
         uIntensity: { value: 0.85 },
+        uFov: { value: 55 },
       },
     });
     return { geometry: geo, material: mat };
   }, [tex, quality, gl]);
+
+  useEffect(() => {
+    matRef.current = material;
+  }, [material]);
+
+  useFrame(() => {
+    if (!matRef.current) return;
+    const fov = (camera as unknown as CameraWithFov).fov ?? 55;
+    matRef.current.uniforms.uFov.value = fov;
+  });
 
   return (
     <mesh

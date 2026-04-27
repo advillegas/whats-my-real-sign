@@ -22,8 +22,8 @@ import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
 
-const SUN_RADIUS = 6;
-const CORONA_SCALE = 2.4;
+const SUN_RADIUS = 8;
+const CORONA_SCALE = 3.0;
 
 const SURFACE_VS = /* glsl */ `
 varying vec2 vUv;
@@ -86,26 +86,26 @@ void main() {
   float r = length(uv) * 2.0;
   if (r > 1.0) discard;
 
-  // Photosphere occupies 1/CORONA_SCALE of the half-quad. CORONA_SCALE = 2.4
-  // → photoR = 1/2.4 ≈ 0.417.
-  float photoR = 0.417;
+  // Photosphere occupies 1/CORONA_SCALE of the half-quad. CORONA_SCALE = 3.0
+  // → photoR = 1/3 ≈ 0.333.
+  float photoR = 0.333;
   float coreCutoff = smoothstep(photoR, photoR + 0.015, r);
   float ang = atan(uv.y, uv.x);
-  float swirl = fbm(vec2(ang * 6.0 + uTime * 0.10, r * 12.0));
-  float ridges = fbm(vec2(ang * 14.0 - uTime * 0.06, r * 22.0));
+  float swirl = fbm(vec2(ang * 6.0 + uTime * 0.10, r * 10.0));
+  float ridges = fbm(vec2(ang * 14.0 - uTime * 0.06, r * 18.0));
   float streaks = 0.55 + 0.45 * (swirl * 0.7 + ridges * 0.3);
 
-  // Steep falloff: by halfway between disc edge and quad edge, glow is gone.
-  float falloff = pow(smoothstep(1.0, photoR, r), 5.0);
-  float corona = falloff * streaks * coreCutoff * 0.55;
+  // Steeper falloff than before so the corona stays close to the disc.
+  float falloff = pow(smoothstep(1.0, photoR, r), 4.0);
+  float corona = falloff * streaks * coreCutoff * 0.85;
 
-  vec3 cInner = vec3(1.4, 1.0, 0.45);
-  vec3 cOuter = vec3(0.7, 0.30, 0.10);
+  vec3 cInner = vec3(2.0, 1.5, 0.65);
+  vec3 cOuter = vec3(1.0, 0.45, 0.15);
   vec3 col = mix(cInner, cOuter, smoothstep(photoR, 1.0, r)) * corona;
 
-  // Tight chromosphere rim right at the photosphere edge.
-  float rim = pow(smoothstep(photoR + 0.025, photoR, r), 6.0) * coreCutoff;
-  col += vec3(1.4, 1.05, 0.6) * rim;
+  // Bright chromosphere rim right at the photosphere edge.
+  float rim = pow(smoothstep(photoR + 0.03, photoR, r), 6.0) * coreCutoff;
+  col += vec3(2.4, 1.8, 1.0) * rim;
 
   gl_FragColor = vec4(col, clamp(corona + rim, 0.0, 1.0));
 }
@@ -131,7 +131,7 @@ export function Sun() {
       uniforms: {
         uTex: { value: sunTex },
         uTime: { value: 0 },
-        uIntensity: { value: 1.35 },
+        uIntensity: { value: 2.6 },
       },
       toneMapped: true,
     });

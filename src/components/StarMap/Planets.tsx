@@ -129,12 +129,13 @@ void main() {
 
   vec3 lit = albedo * (wrap * 1.05 + uEmissive);
 
-  // Rim: soft blue/atmospheric halo on the day side limb.
+  // Rim: soft atmospheric halo on the day side limb. Kept well under
+  // bloom-threshold so it doesn't blow up across the sky.
   if (uHasAtmo > 0.5) {
     vec3 V = normalize(cameraPosition - vWorldPos);
-    float fres = pow(1.0 - max(dot(V, N), 0.0), 2.5);
-    float lobe = pow(max(dot(N, L), 0.0), 0.5);
-    lit += uAtmo * fres * lobe * 0.6;
+    float fres = pow(1.0 - max(dot(V, N), 0.0), 3.0);
+    float lobe = pow(max(dot(N, L), 0.0), 0.6);
+    lit += uAtmo * fres * lobe * 0.18;
   }
 
   gl_FragColor = vec4(lit, 1.0);
@@ -288,7 +289,7 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHo
       )}
       {style.atmosphere && (
         <mesh>
-          <sphereGeometry args={[style.size * 1.06, 32, 32]} />
+          <sphereGeometry args={[style.size * 1.04, 32, 32]} />
           <shaderMaterial
             transparent
             depthWrite={false}
@@ -298,9 +299,10 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHo
               uAtmo: {
                 value: new Color(style.atmosphere[0], style.atmosphere[1], style.atmosphere[2]),
               },
+              uSunWorld: { value: sunVec },
             }}
             vertexShader={`varying vec3 vN; varying vec3 vW; void main(){vN=normalize(normalMatrix*normal); vec4 wp=modelMatrix*vec4(position,1.0); vW=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp;}`}
-            fragmentShader={`precision highp float; varying vec3 vN; varying vec3 vW; uniform vec3 uAtmo; void main(){ vec3 V=normalize(cameraPosition-vW); float f=pow(1.0-max(dot(V,vN),0.0),3.0); gl_FragColor=vec4(uAtmo*f*1.6,f);} `}
+            fragmentShader={`precision highp float; varying vec3 vN; varying vec3 vW; uniform vec3 uAtmo; uniform vec3 uSunWorld; void main(){ vec3 V=normalize(cameraPosition-vW); vec3 L=normalize(uSunWorld-vW); float fres=pow(1.0-max(dot(V,vN),0.0),3.5); float ndl=max(dot(vN,L),0.0); float a=fres*ndl*0.55; gl_FragColor=vec4(uAtmo*a,a);} `}
           />
         </mesh>
       )}

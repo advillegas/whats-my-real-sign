@@ -26,6 +26,7 @@ import {
 import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { allBodySky, type PlanetId } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
+import { useLabelTap } from "@/lib/use-label-tap";
 
 interface PlanetStyle {
   texture: string;
@@ -187,15 +188,17 @@ interface PlanetProps {
   sunVec: Vector3;
   style: PlanetStyle;
   onPick: (id: PlanetId, ra: number, dec: number, dist: number) => void;
-  onSelect: (id: PlanetId, ra: number, dec: number, dist: number) => void;
 }
 
-function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect }: PlanetProps) {
+function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick }: PlanetProps) {
   const groupRef = useRef<Group>(null);
   const sphereRef = useRef<Mesh>(null);
   const [hot, setHot] = useState(false);
   const tex = useLoader(TextureLoader, style.texture);
   const ringTex = useLoader(TextureLoader, style.ring?.texture ?? "/textures/saturn_rings.jpg");
+  const labelTap = useLabelTap({
+    onTap: () => onPick(id, ra, dec, dist),
+  });
 
   const { material, ringMaterial } = useMemo(() => {
     tex.colorSpace = SRGBColorSpace;
@@ -260,10 +263,6 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect }: Pla
       ref={groupRef}
       position={[vec.x, vec.y, vec.z]}
       rotation={[0, 0, (style.tilt * Math.PI) / 180]}
-      onClick={(e) => {
-        e.stopPropagation();
-        onPick(id, ra, dec, dist);
-      }}
     >
       <mesh ref={sphereRef}>
         <sphereGeometry args={[style.size, 64, 64]} />
@@ -282,13 +281,9 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect }: Pla
         style={{ pointerEvents: "auto" }}
       >
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onPick(id, ra, dec, dist);
-          }}
-          onPointerEnter={() => {
-            setHot(true);
-            onSelect(id, ra, dec, dist);
+          onPointerDown={labelTap.onPointerDown}
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setHot(true);
           }}
           onPointerLeave={() => setHot(false)}
           style={{
@@ -309,6 +304,7 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect }: Pla
               : "0 0 6px rgba(0,0,0,0.85)",
             whiteSpace: "nowrap",
             userSelect: "none",
+            touchAction: "none",
             transition: "color 120ms ease, text-shadow 120ms ease",
           }}
         >
@@ -325,7 +321,6 @@ export function Planets() {
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const markInteracted = useViewer((s) => s.markInteracted);
-  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
 
   const { positions, sunVec } = useMemo(() => {
     const all = allBodySky(date);
@@ -344,7 +339,8 @@ export function Planets() {
 
   if (!visible) return null;
 
-  const onSelect = (id: PlanetId, ra: number, dec: number, dist: number) => {
+  const onPick = (id: PlanetId, ra: number, dec: number, dist: number) => {
+    setCameraTarget(ra, dec, 22);
     setSelected({
       id,
       name: id,
@@ -354,16 +350,6 @@ export function Planets() {
       wikiTitle: id,
       blurb: `Distance ${dist.toFixed(3)} AU from Earth.`,
     });
-  };
-
-  const onHoverSelect = (id: PlanetId, ra: number, dec: number, dist: number) => {
-    if (!tooltipsEnabled) return;
-    onSelect(id, ra, dec, dist);
-  };
-
-  const onPick = (id: PlanetId, ra: number, dec: number, dist: number) => {
-    setCameraTarget(ra, dec, 22);
-    onSelect(id, ra, dec, dist);
     markInteracted();
   };
 
@@ -383,7 +369,6 @@ export function Planets() {
             sunVec={sunVec}
             style={style}
             onPick={onPick}
-            onSelect={onHoverSelect}
           />
         );
       })}

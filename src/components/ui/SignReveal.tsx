@@ -11,6 +11,7 @@ import {
   type ConstellationBoundary,
 } from "@/lib/constellations";
 import { useViewer } from "@/store/viewer-store";
+import { SwipeDismiss } from "./SwipeDismiss";
 
 const PRECESSION_RATE_ARCSEC_PER_YR = 50.29;
 const PRECESSION_PERIOD_YR = 25772;
@@ -88,28 +89,31 @@ export function SignReveal() {
   }
 
   return (
-    <div className="glass rounded-2xl px-3.5 py-3 sm:px-5 sm:py-4 max-w-md relative max-h-[75vh] overflow-y-auto scrollbar-none overscroll-contain">
+    <SwipeDismiss
+      onDismiss={() => setOpen(false)}
+      className="glass rounded-2xl px-5 py-4 sm:px-6 sm:py-5 max-w-md relative max-h-[75vh] overflow-y-auto scrollbar-none overscroll-contain"
+    >
       <button
         onClick={() => setOpen(false)}
         aria-label="Hide constellation reveal"
         title="Hide for a fuller view of the sky"
-        className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-7 h-7 sm:w-8 sm:h-8 grid place-items-center rounded-full text-white/55 hover:text-white hover:bg-white/10 active:bg-white/20 transition text-lg leading-none z-10"
+        className="absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 grid place-items-center rounded-full text-white/55 hover:text-white hover:bg-white/10 active:bg-white/20 transition text-lg leading-none z-10"
       >
         ×
       </button>
-      <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.24em] sm:tracking-[0.28em] text-blue-200/70 pr-7">
+      <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.24em] sm:tracking-[0.28em] text-blue-200/70 pr-9">
         Constellation behind the Sun
       </div>
-      <div className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-white pr-7">
+      <div className="mt-1.5 text-2xl sm:text-3xl font-semibold tracking-tight text-white pr-9">
         {realName}
       </div>
 
-      <p className="mt-1.5 text-[11px] sm:text-xs text-white/60 leading-relaxed">
+      <p className="mt-2.5 text-[11px] sm:text-xs text-white/60 leading-relaxed">
         Your real zodiac sign is the constellation positioned directly behind
         the Sun on the day you were born.
       </p>
 
-      <div className="mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-white/70 leading-relaxed">
+      <div className="mt-2.5 sm:mt-3 text-[11px] sm:text-xs text-white/70 leading-relaxed">
         {tropical && (
           <>
             Western astrology calls this date {""}
@@ -137,7 +141,7 @@ export function SignReveal() {
         <button
           onClick={() => setShowWhy((v) => !v)}
           aria-expanded={showWhy}
-          className="mt-2 text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-blue-200/80 hover:text-blue-100 transition flex items-center gap-1 self-start"
+          className="mt-3 text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-blue-200/80 hover:text-blue-100 transition flex items-center gap-1 self-start"
         >
           <span>{showWhy ? "Hide the science" : "Why is this different from my horoscope?"}</span>
           <span className={`transition-transform ${showWhy ? "rotate-90" : ""}`}>›</span>
@@ -154,7 +158,7 @@ export function SignReveal() {
             transition={{ duration: 0.25 }}
             className="overflow-hidden"
           >
-            <div className="mt-3 pt-3 border-t border-white/10 text-[11px] sm:text-[12px] text-white/75 leading-relaxed space-y-2">
+            <div className="mt-4 pt-4 border-t border-white/10 text-[11px] sm:text-[12px] text-white/75 leading-relaxed space-y-3">
               <p>
                 The 12 zodiac signs were systematized by Babylonian
                 astronomers in the 5th–4th century BCE, who divided the
@@ -226,6 +230,6 @@ export function SignReveal() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </SwipeDismiss>
   );
 }

@@ -158,4 +158,51 @@ export function raDecToAltAz(
   return { alt: (alt * 180) / Math.PI, az: (az * 180) / Math.PI };
 }
 
+/**
+ * Inverse of `raDecToAltAz`. Given the altitude/azimuth a phone (or any
+ * observer) is currently pointing at, plus an observer location and date,
+ * return the equatorial coordinates of that direction in the J2000-ish
+ * frame the rest of the app uses.
+ *
+ * Standard spherical-triangle relations:
+ *   sin δ = sin a · sin φ + cos a · cos φ · cos A
+ *   sin H = -sin A · cos a / cos δ
+ *   cos H = (sin a - sin δ · sin φ) / (cos δ · cos φ)
+ *   RA    = LST - H
+ *
+ * a = altitude, A = azimuth (east-of-north), φ = observer latitude.
+ */
+export function altAzToRaDec(
+  altDeg: number,
+  azDeg: number,
+  latDeg: number,
+  lonDeg: number,
+  date: Date,
+): { raHours: number; decDeg: number } {
+  const a = (altDeg * Math.PI) / 180;
+  const A = (azDeg * Math.PI) / 180;
+  const phi = (latDeg * Math.PI) / 180;
+
+  const sinDec =
+    Math.sin(a) * Math.sin(phi) + Math.cos(a) * Math.cos(phi) * Math.cos(A);
+  const dec = Math.asin(Math.max(-1, Math.min(1, sinDec)));
+  const cosDec = Math.cos(dec);
+
+  let haRad: number;
+  if (cosDec < 1e-9) {
+    // Looking straight at a celestial pole — hour angle is undefined; pick 0.
+    haRad = 0;
+  } else {
+    const sinH = (-Math.sin(A) * Math.cos(a)) / cosDec;
+    const cosH = (Math.sin(a) - Math.sin(dec) * Math.sin(phi)) / (cosDec * Math.cos(phi));
+    haRad = Math.atan2(sinH, cosH);
+  }
+
+  const lst = lmstHours(date, lonDeg);
+  const haHours = (haRad * 12) / Math.PI;
+  let ra = lst - haHours;
+  ra = ((ra % 24) + 24) % 24;
+  return { raHours: ra, decDeg: (dec * 180) / Math.PI };
+}
+
 export { AstroTime };

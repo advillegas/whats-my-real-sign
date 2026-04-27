@@ -27,6 +27,7 @@ import {
   type ConstellationMeta,
 } from "@/lib/constellations";
 import { starBlurb, dsoBlurb } from "@/lib/object-info";
+import { LABEL_TAP_MAX_MS, LABEL_TAP_MOVE_PX } from "@/lib/use-label-tap";
 
 interface Props {
   stars: StarRecord[];
@@ -36,6 +37,9 @@ interface Props {
 const STAR_TOL_AT_55 = 0.012; // radians, ~0.69°
 const DSO_TOL_AT_55 = 0.018; // ~1.03°
 const POINTS_THRESH_AT_55 = 6; // raycaster threshold, units (= world-units on a 1000R sphere ~ 0.34°)
+// Match the label-tap hook thresholds exactly so identical gestures behave
+// identically whether they start on a label or on bare canvas.
+const TAP_MOVE_PX_SQ = LABEL_TAP_MOVE_PX * LABEL_TAP_MOVE_PX;
 
 export function Picker({ stars, dso }: Props) {
   const { gl, camera, scene } = useThree();
@@ -77,8 +81,8 @@ export function Picker({ stars, dso }: Props) {
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
       const dt = performance.now() - start.t;
-      // Treat as click only if barely moved and under 350 ms.
-      if (dx * dx + dy * dy > 9 || dt > 350) return;
+      // Match label-tap hook: clean tap iff barely moved and under 500 ms.
+      if (dx * dx + dy * dy > TAP_MOVE_PX_SQ || dt > LABEL_TAP_MAX_MS) return;
       const rect = dom.getBoundingClientRect();
       const ndc = new Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,

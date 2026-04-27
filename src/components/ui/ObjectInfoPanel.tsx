@@ -31,6 +31,7 @@ import {
   wikiCandidates,
 } from "@/lib/object-info";
 import { raDecToAltAz } from "@/lib/astronomy";
+import { SwipeDismiss } from "./SwipeDismiss";
 
 interface WikiSummary {
   title?: string;
@@ -138,8 +139,12 @@ export function ObjectInfoPanel() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 40 }}
           transition={{ duration: 0.25 }}
-          className="glass fixed inset-x-2 bottom-20 sm:inset-x-auto sm:left-auto sm:right-5 sm:bottom-[8.5rem] sm:top-auto rounded-2xl p-4 sm:max-w-sm sm:w-[22rem] flex flex-col gap-3 z-40 max-h-[60vh] sm:max-h-[60vh] overflow-y-auto scrollbar-none safe-left safe-right shadow-2xl"
+          className="fixed inset-x-2 bottom-20 sm:inset-x-auto sm:left-auto sm:right-5 sm:bottom-[8.5rem] sm:top-auto sm:max-w-sm sm:w-[22rem] z-40 safe-left safe-right"
         >
+          <SwipeDismiss
+            onDismiss={() => setSelected(null)}
+            className="glass rounded-2xl p-5 sm:p-6 flex flex-col gap-4 max-h-[60vh] sm:max-h-[60vh] overflow-y-auto scrollbar-none shadow-2xl"
+          >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.24em] text-blue-200/70">
@@ -175,7 +180,7 @@ export function ObjectInfoPanel() {
           </div>
 
           {/* Coordinates */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono text-white/85 border-t border-white/10 pt-2">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] font-mono text-white/85 border-t border-white/10 pt-3">
             <div className="text-blue-200/65">α (J2000)</div>
             <div className="text-right">{formatRA(selected.ra)}</div>
             <div className="text-blue-200/65">δ (J2000)</div>
@@ -198,7 +203,7 @@ export function ObjectInfoPanel() {
 
           {/* Star astrophysics */}
           {star && (
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono text-white/85 border-t border-white/10 pt-2">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] font-mono text-white/85 border-t border-white/10 pt-3">
               {star.spect && (
                 <>
                   <div className="text-blue-200/65">spectral type</div>
@@ -238,7 +243,7 @@ export function ObjectInfoPanel() {
 
           {/* Star cross-IDs */}
           {star && (
-            <div className="text-[10px] font-mono text-white/55 border-t border-white/10 pt-2 flex flex-wrap gap-x-3 gap-y-1">
+            <div className="text-[10px] font-mono text-white/55 border-t border-white/10 pt-3 flex flex-wrap gap-x-3 gap-y-1.5">
               {(() => {
                 const { bayer, flamsteed } = expandBayerFlamsteed(star.bf);
                 const ids: string[] = [];
@@ -259,7 +264,7 @@ export function ObjectInfoPanel() {
 
           {/* DSO data */}
           {dso && (
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono text-white/85 border-t border-white/10 pt-2">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] font-mono text-white/85 border-t border-white/10 pt-3">
               {dso.m && (
                 <>
                   <div className="text-blue-200/65">Messier</div>
@@ -288,7 +293,7 @@ export function ObjectInfoPanel() {
 
           {/* DSO cross-IDs */}
           {dso && (
-            <div className="text-[10px] font-mono text-white/55 border-t border-white/10 pt-2 flex flex-wrap gap-x-3 gap-y-1">
+            <div className="text-[10px] font-mono text-white/55 border-t border-white/10 pt-3 flex flex-wrap gap-x-3 gap-y-1.5">
               {dso.id && <span className="text-white/65">{dso.id}</span>}
               {dso.ngc && <span className="text-white/65">NGC {dso.ngc}</span>}
               {dso.ic && <span className="text-white/65">IC {dso.ic}</span>}
@@ -315,7 +320,7 @@ export function ObjectInfoPanel() {
               className="rounded-lg max-h-32 object-cover w-full"
             />
           )}
-          <div className="text-[12px] sm:text-[13px] text-white/85 leading-relaxed min-h-[1rem] flex flex-col gap-2">
+          <div className="text-[12px] sm:text-[13px] text-white/85 leading-relaxed min-h-[1rem] flex flex-col gap-2.5 border-t border-white/10 pt-3">
             {loading ? (
               <span className="text-white/55 italic">Looking up Wikipedia summary…</span>
             ) : (
@@ -343,11 +348,12 @@ export function ObjectInfoPanel() {
           )}
           {/* Side-info: estimate distance in ly inline for stars */}
           {star && typeof star.distPc === "number" && star.distPc < 1000 && (
-            <div className="text-[10px] text-white/45 italic border-t border-white/10 pt-2">
+            <div className="text-[10px] text-white/45 italic border-t border-white/10 pt-3">
               Light from {star.name ?? star.id} takes ≈
               {pcToLightYears(star.distPc).toFixed(0)} years to reach Earth.
             </div>
           )}
+          </SwipeDismiss>
         </motion.aside>
       )}
     </AnimatePresence>

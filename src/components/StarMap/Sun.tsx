@@ -22,6 +22,7 @@ import {
 import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
+import { useLabelTap } from "@/lib/use-label-tap";
 
 const SUN_RADIUS = 8;
 const CORONA_SCALE = 3.0;
@@ -116,7 +117,6 @@ export function Sun() {
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const markInteracted = useViewer((s) => s.markInteracted);
-  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
   const sunTex = useLoader(TextureLoader, "/textures/sun.jpg");
   const surfaceRef = useRef<Mesh>(null);
   const coronaRef = useRef<Mesh>(null);
@@ -161,7 +161,8 @@ export function Sun() {
     }
   });
 
-  const selectSun = () => {
+  const onTap = () => {
+    setCameraTarget(sky.ra, sky.dec, 28);
     setSelected({
       id: "SUN",
       name: "Sun",
@@ -172,22 +173,14 @@ export function Sun() {
       wikiTitle: "Sun",
       blurb: `Our G2V main-sequence star. Distance ${sky.dist.toFixed(3)} AU.`,
     });
-  };
-
-  const onPick = (e: { stopPropagation(): void }) => {
-    e.stopPropagation();
-    setCameraTarget(sky.ra, sky.dec, 28);
-    selectSun();
     markInteracted();
   };
+  const labelTap = useLabelTap({ onTap });
 
   void Color;
 
   return (
-    <group
-      position={[vec.x, vec.y, vec.z]}
-      onClick={onPick}
-    >
+    <group position={[vec.x, vec.y, vec.z]}>
       <mesh ref={surfaceRef}>
         <sphereGeometry args={[SUN_RADIUS, 64, 64]} />
         <primitive object={surfaceMat} attach="material" />
@@ -203,15 +196,9 @@ export function Sun() {
         style={{ pointerEvents: "auto" }}
       >
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setCameraTarget(sky.ra, sky.dec, 28);
-            selectSun();
-            markInteracted();
-          }}
-          onPointerEnter={() => {
-            setHot(true);
-            if (tooltipsEnabled) selectSun();
+          onPointerDown={labelTap.onPointerDown}
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setHot(true);
           }}
           onPointerLeave={() => setHot(false)}
           style={{
@@ -232,6 +219,7 @@ export function Sun() {
               : "0 0 8px rgba(0,0,0,0.9), 0 0 14px rgba(255, 180, 80, 0.55)",
             whiteSpace: "nowrap",
             userSelect: "none",
+            touchAction: "none",
             transition: "color 120ms ease, text-shadow 120ms ease",
           }}
         >

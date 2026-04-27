@@ -6,6 +6,7 @@ import { Vector3 } from "three";
 import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { loadMeta, type ConstellationMeta } from "@/lib/constellations";
 import { useViewer } from "@/store/viewer-store";
+import { useLabelTap } from "@/lib/use-label-tap";
 
 function ConstellationLabel({
   m,
@@ -18,12 +19,26 @@ function ConstellationLabel({
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const setHover = useViewer((s) => s.setHover);
   const markInteracted = useViewer((s) => s.markInteracted);
-  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
   const [hot, setHot] = useState(false);
   const fontSize = m.rank === "1" ? 14 : m.rank === "2" ? 12 : 10.5;
   const baseOpacity = m.rank === "1" ? 0.95 : m.rank === "2" ? 0.78 : 0.55;
   const opacity = hot ? 1 : baseOpacity;
   const color = hot ? "rgba(255, 240, 195, 1)" : `rgba(180,210,255,${opacity})`;
+  const labelTap = useLabelTap({
+    onTap: () => {
+      setCameraTarget(m.ra, m.dec);
+      setSelected({
+        id: `CON_${m.desig}`,
+        name: m.name,
+        ra: m.ra,
+        dec: m.dec,
+        kind: "constellation",
+        blurb: `IAU constellation ${m.desig}.`,
+        wikiTitle: m.name,
+      });
+      markInteracted();
+    },
+  });
 
   return (
     <group position={position}>
@@ -34,7 +49,9 @@ function ConstellationLabel({
         style={{ pointerEvents: "auto" }}
       >
         <button
-          onPointerEnter={() => {
+          onPointerDown={labelTap.onPointerDown}
+          onPointerEnter={(e) => {
+            if (e.pointerType !== "mouse") return;
             setHot(true);
             setHover({
               name: m.name,
@@ -44,36 +61,12 @@ function ConstellationLabel({
               x: 0,
               y: 0,
             });
-            if (tooltipsEnabled) {
-              setSelected({
-                id: `CON_${m.desig}`,
-                name: m.name,
-                ra: m.ra,
-                dec: m.dec,
-                kind: "constellation",
-                blurb: `IAU constellation ${m.desig}.`,
-                wikiTitle: m.name,
-              });
-            }
             document.body.style.cursor = "pointer";
           }}
           onPointerLeave={() => {
             setHot(false);
             setHover(null);
             document.body.style.cursor = "";
-          }}
-          onClick={() => {
-            setCameraTarget(m.ra, m.dec);
-            setSelected({
-              id: `CON_${m.desig}`,
-              name: m.name,
-              ra: m.ra,
-              dec: m.dec,
-              kind: "constellation",
-              blurb: `IAU constellation ${m.desig}.`,
-              wikiTitle: m.name,
-            });
-            markInteracted();
           }}
           style={{
             fontFamily: "var(--font-sans, system-ui)",
@@ -90,6 +83,7 @@ function ConstellationLabel({
             cursor: "pointer",
             whiteSpace: "nowrap",
             pointerEvents: "auto",
+            touchAction: "none",
             transition: "color 120ms ease, text-shadow 120ms ease",
           }}
         >

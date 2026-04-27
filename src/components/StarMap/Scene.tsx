@@ -19,6 +19,7 @@ import { ReferenceFrames } from "./ReferenceFrames";
 import { Horizon } from "./Horizon";
 import { BrightStarLabels } from "./BrightStarLabels";
 import { CameraRig } from "./CameraRig";
+import { CompassDriver } from "./CompassDriver";
 import { Picker } from "./Picker";
 import { CoordinateHUDFeeder } from "@/components/ui/CoordinateHUD";
 import {
@@ -81,6 +82,7 @@ export function Scene() {
       style={{ position: "fixed", inset: 0, background: "black", touchAction: "none" }}
     >
       <CameraRig />
+      <CompassDriver />
       <CoordinateHUDFeeder />
       <Suspense fallback={null}>
         <MilkyWay quality={isMobile ? "low" : "high"} />

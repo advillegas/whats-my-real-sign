@@ -15,6 +15,7 @@ import { Vector3, MathUtils } from "three";
 import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { clamp, easeInOutCubic, lerp, shortestAngle } from "@/lib/tween";
 import { useViewer } from "@/store/viewer-store";
+import { compassState } from "@/lib/compass-state";
 
 const PITCH_LIMIT = MathUtils.degToRad(89.0);
 const DRAG_SENSITIVITY = 0.0035;
@@ -59,6 +60,12 @@ export function CameraRig() {
   const fovNudge = useViewer((s) => s.fovNudge);
   const setAnimating = useViewer((s) => s.setAnimating);
   const markInteracted = useViewer((s) => s.markInteracted);
+  const compassMode = useViewer((s) => s.compassMode);
+  const compassModeRef = useRef(compassMode);
+  compassModeRef.current = compassMode;
+  // Carries from compass-driven orientation back to manual when toggled off,
+  // avoiding a snap.
+  const prevCompassMode = useRef(compassMode);
 
   useEffect(() => {
     if (!camera) return;
@@ -93,7 +100,9 @@ export function CameraRig() {
       } catch {
         /* noop */
       }
-      if (pointers.current.size === 1) {
+      // While compass mode is active we still want pinch-to-zoom but not
+      // drag-to-look — the device gyro owns yaw/pitch.
+      if (pointers.current.size === 1 && !compassModeRef.current) {
         dragging.current = true;
         lastPos.current = { x: e.clientX, y: e.clientY };
         pinch.current = null;
@@ -123,6 +132,7 @@ export function CameraRig() {
       }
 
       if (!dragging.current) return;
+      if (compassModeRef.current) return;
       const dx = e.clientX - lastPos.current.x;
       const dy = e.clientY - lastPos.current.y;
       lastPos.current = { x: e.clientX, y: e.clientY };
@@ -146,7 +156,7 @@ export function CameraRig() {
       }
       if (pointers.current.size === 0) {
         dragging.current = false;
-      } else if (pointers.current.size === 1) {
+      } else if (pointers.current.size === 1 && !compassModeRef.current) {
         // Resume drag from the surviving touch.
         dragging.current = true;
         const [pt] = pointers.current.values();
@@ -202,6 +212,17 @@ export function CameraRig() {
       yp.current = next;
       return;
     }
+    // Camera target tweens (search results, sign reveal) are meaningless when
+    // the user is physically aiming the device. Only honor the destination
+    // FOV in that case.
+    if (compassModeRef.current) {
+      if (targetState.fovDeg && "fov" in camera) {
+        const cam = camera as { fov: number; updateProjectionMatrix: () => void };
+        cam.fov = clamp(targetState.fovDeg, MIN_FOV, MAX_FOV);
+        cam.updateProjectionMatrix();
+      }
+      return;
+    }
     const dir = raDecHoursToVec3(
       targetState.raHours,
       targetState.decDeg,
@@ -242,20 +263,37 @@ export function CameraRig() {
   }, [fovNudge.nonce]);
 
   useFrame(() => {
-    if (tween.current) {
-      const t = (performance.now() - tween.current.start) / tween.current.duration;
-      const tc = clamp(t, 0, 1);
-      const e = easeInOutCubic(tc);
-      yp.current.yaw = lerp(tween.current.from.yaw, tween.current.to.yaw, e);
-      yp.current.pitch = lerp(tween.current.from.pitch, tween.current.to.pitch, e);
-      if ("fov" in camera) {
-        const cam = camera as { fov: number; updateProjectionMatrix: () => void };
-        cam.fov = lerp(tween.current.fromFov, tween.current.toFov, e);
-        cam.updateProjectionMatrix();
+    // Compass mode: ignore tweens, copy live device orientation in. When
+    // toggling off, the latest compass yaw/pitch is left in `yp` so manual
+    // control resumes without a snap.
+    if (compassModeRef.current) {
+      if (compassState.hasReading) {
+        yp.current.yaw = compassState.yaw;
+        yp.current.pitch = clamp(compassState.pitch, -PITCH_LIMIT, PITCH_LIMIT);
       }
-      if (tc >= 1) {
+      tween.current = null;
+      prevCompassMode.current = true;
+    } else {
+      if (prevCompassMode.current) {
+        // Just toggled off — drop any pending tween so manual handoff is clean.
         tween.current = null;
-        setAnimating(false);
+        prevCompassMode.current = false;
+      }
+      if (tween.current) {
+        const t = (performance.now() - tween.current.start) / tween.current.duration;
+        const tc = clamp(t, 0, 1);
+        const e = easeInOutCubic(tc);
+        yp.current.yaw = lerp(tween.current.from.yaw, tween.current.to.yaw, e);
+        yp.current.pitch = lerp(tween.current.from.pitch, tween.current.to.pitch, e);
+        if ("fov" in camera) {
+          const cam = camera as { fov: number; updateProjectionMatrix: () => void };
+          cam.fov = lerp(tween.current.fromFov, tween.current.toFov, e);
+          cam.updateProjectionMatrix();
+        }
+        if (tc >= 1) {
+          tween.current = null;
+          setAnimating(false);
+        }
       }
     }
     applyYawPitch(yp.current.yaw, yp.current.pitch, lookTarget.current);

@@ -93,6 +93,13 @@ interface ViewerState {
     decDeg: number;
     fovDeg: number;
   };
+  /**
+   * Phone "AR" sky-pointing mode. While on, the device gyro+compass drives
+   * the camera so the on-screen sky tracks where the phone is physically
+   * pointed. Only meaningful with an `observer` set (the alt/az → RA/Dec
+   * conversion is observer-dependent).
+   */
+  compassMode: boolean;
 
   setDate: (d: Date) => void;
   setCurrentJdDate: (d: Date) => void;
@@ -106,6 +113,7 @@ interface ViewerState {
   toggleTooltips: () => void;
   setObserver: (o: ObserverLocation | null) => void;
   setCameraReadout: (r: { raHours: number; decDeg: number; fovDeg: number }) => void;
+  setCompassMode: (on: boolean) => void;
 }
 
 const today = new Date();
@@ -136,6 +144,7 @@ export const useViewer = create<ViewerState>((set) => ({
   tooltipsEnabled: true,
   observer: null,
   cameraReadout: { raHours: 0, decDeg: 0, fovDeg: 55 },
+  compassMode: false,
   setDate: (d) => set({ requestedDate: d, hasInteracted: true }),
   setCurrentJdDate: (d) => set({ date: d }),
   setCameraTarget: (raHours, decDeg, fovDeg) =>
@@ -166,6 +175,7 @@ export const useViewer = create<ViewerState>((set) => ({
     }),
   setObserver: (o) => set({ observer: o }),
   setCameraReadout: (r) => set({ cameraReadout: r }),
+  setCompassMode: (on) => set({ compassMode: on }),
 }));
 
 /**

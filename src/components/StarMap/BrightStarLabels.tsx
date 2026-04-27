@@ -18,6 +18,7 @@ import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { loadStars, type StarRecord } from "@/lib/catalogs";
 import { useViewer } from "@/store/viewer-store";
 import { starBlurb } from "@/lib/object-info";
+import { useLabelTap } from "@/lib/use-label-tap";
 
 const BRIGHT_MAG_LIMIT = 2.6;
 const FADE_IN_FOV = 70;
@@ -48,11 +49,28 @@ function StarLabel({ star, position }: LabelProps) {
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const markInteracted = useViewer((s) => s.markInteracted);
-  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
   const [hot, setHot] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const subRef = useRef<HTMLSpanElement>(null);
   const { camera } = useThree();
+  const displayName = star.name ?? star.bf ?? star.id;
+  const labelTap = useLabelTap({
+    onTap: () => {
+      setCameraTarget(star.ra, star.dec, 18);
+      setSelected({
+        id: star.id,
+        name: displayName,
+        ra: star.ra,
+        dec: star.dec,
+        kind: "star",
+        mag: star.mag,
+        wikiTitle: star.name,
+        blurb: starBlurb(star),
+        record: star,
+      });
+      markInteracted();
+    },
+  });
 
   useFrame(() => {
     if (!ref.current) return;
@@ -70,7 +88,6 @@ function StarLabel({ star, position }: LabelProps) {
     }
   });
 
-  const displayName = star.name ?? star.bf ?? star.id;
   const bayer = star.bf;
 
   return (
@@ -82,41 +99,15 @@ function StarLabel({ star, position }: LabelProps) {
       >
         <button
           ref={ref}
-          onPointerEnter={() => {
+          onPointerDown={labelTap.onPointerDown}
+          onPointerEnter={(e) => {
+            if (e.pointerType !== "mouse") return;
             setHot(true);
-            if (tooltipsEnabled) {
-              setSelected({
-                id: star.id,
-                name: displayName,
-                ra: star.ra,
-                dec: star.dec,
-                kind: "star",
-                mag: star.mag,
-                wikiTitle: star.name,
-                blurb: starBlurb(star),
-                record: star,
-              });
-            }
             document.body.style.cursor = "pointer";
           }}
           onPointerLeave={() => {
             setHot(false);
             document.body.style.cursor = "";
-          }}
-          onClick={() => {
-            setCameraTarget(star.ra, star.dec, 18);
-            setSelected({
-              id: star.id,
-              name: displayName,
-              ra: star.ra,
-              dec: star.dec,
-              kind: "star",
-              mag: star.mag,
-              wikiTitle: star.name,
-              blurb: starBlurb(star),
-              record: star,
-            });
-            markInteracted();
           }}
           style={{
             fontFamily: "var(--font-sans, system-ui)",
@@ -132,6 +123,7 @@ function StarLabel({ star, position }: LabelProps) {
               : "0 0 6px rgba(0,0,0,0.9)",
             cursor: "pointer",
             whiteSpace: "nowrap",
+            touchAction: "none",
             transition: "color 120ms ease, text-shadow 120ms ease, opacity 200ms ease",
             transform: "translate(8px, 0)",
           }}

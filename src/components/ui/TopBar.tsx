@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { useViewer } from "@/store/viewer-store";
 import { buildUrl } from "@/lib/url-state";
+import { CompassButton } from "./CompassButton";
 import { LocationModal } from "./LocationModal";
 import { SearchPalette } from "./SearchPalette";
 
@@ -34,8 +35,26 @@ const CheckIcon = () => (
   </svg>
 );
 
+const EyeIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const EyeOffIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M17.94 17.94A10.5 10.5 0 0 1 12 19c-7 0-11-7-11-7a17.7 17.7 0 0 1 4.06-4.94" />
+    <path d="M10.58 10.58A2 2 0 1 0 13.42 13.42" />
+    <path d="M14.12 6.16A10.5 10.5 0 0 1 12 5c7 0 11 7 11 7a17.7 17.7 0 0 1-2.16 2.94" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </svg>
+);
+
 export function TopBar() {
   const observer = useViewer((s) => s.observer);
+  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
+  const toggleTooltips = useViewer((s) => s.toggleTooltips);
   const [locOpen, setLocOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -84,6 +103,21 @@ export function TopBar() {
         <PinIcon />
         <span className="hidden sm:inline">
           {observer ? observer.name ?? "Observer" : "Location"}
+        </span>
+      </button>
+      <CompassButton onNeedObserver={() => setLocOpen(true)} />
+      <button
+        onClick={() => toggleTooltips()}
+        className={`glass rounded-full sm:px-3 sm:py-2 px-0 py-0 w-10 h-10 sm:w-auto sm:h-auto text-sm active:bg-white/10 flex items-center justify-center sm:justify-start sm:gap-2 transition ${
+          tooltipsEnabled ? "text-white/80 hover:text-white" : "text-white/55 hover:text-white/80"
+        }`}
+        aria-label={tooltipsEnabled ? "Hide object info on tap" : "Show object info on tap"}
+        aria-pressed={tooltipsEnabled}
+        title={tooltipsEnabled ? "Object info on — click to disable" : "Object info off — click to enable"}
+      >
+        {tooltipsEnabled ? <EyeIcon /> : <EyeOffIcon />}
+        <span className="hidden sm:inline">
+          {tooltipsEnabled ? "Info on" : "Info off"}
         </span>
       </button>
       <button

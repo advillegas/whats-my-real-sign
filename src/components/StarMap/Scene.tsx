@@ -64,11 +64,11 @@ export function Scene() {
       {stars && dso && <Picker stars={stars} dso={dso} />}
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
-          intensity={1.05}
-          luminanceThreshold={0.55}
-          luminanceSmoothing={0.4}
+          intensity={0.55}
+          luminanceThreshold={0.95}
+          luminanceSmoothing={0.25}
           mipmapBlur
-          radius={0.78}
+          radius={0.55}
         />
         <Vignette eskil={false} offset={0.2} darkness={0.55} />
         <SMAA />

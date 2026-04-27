@@ -22,7 +22,8 @@ import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
 
-const SUN_RADIUS = 14;
+const SUN_RADIUS = 10;
+const CORONA_SCALE = 3.4;
 
 const SURFACE_VS = /* glsl */ `
 varying vec2 vUv;
@@ -43,8 +44,8 @@ void main() {
   // Subtle UV drift to suggest convection without animating the texture.
   vec2 uv = vUv + vec2(uTime * 0.0015, 0.0);
   vec3 col = texture2D(uTex, uv).rgb;
-  // Bias toward yellow-white & boost into HDR.
-  vec3 tint = vec3(1.20, 1.05, 0.78);
+  // Bias toward yellow-white & boost into HDR (kept moderate so bloom doesn't blanket the screen).
+  vec3 tint = vec3(1.18, 1.05, 0.82);
   col = pow(col, vec3(0.9)) * tint * uIntensity;
   gl_FragColor = vec4(col, 1.0);
 }
@@ -85,25 +86,28 @@ void main() {
   float r = length(uv) * 2.0;
   if (r > 1.0) discard;
 
-  // Inner edge respects the photosphere radius; corona starts there.
-  float coreCutoff = smoothstep(0.18, 0.21, r);  // 0 inside disc, 1 outside
+  // The photosphere occupies 1 / CORONA_SCALE of the quad, so the corona
+  // should start just outside that radius (~0.30 in normalized r).
+  float photoR = 0.30;
+  float coreCutoff = smoothstep(photoR, photoR + 0.02, r);
   float ang = atan(uv.y, uv.x);
-  float swirl = fbm(vec2(ang * 5.0 + uTime * 0.13, r * 7.0));
-  float ridges = fbm(vec2(ang * 12.0 - uTime * 0.07, r * 14.0));
-  float streaks = swirl * 0.7 + ridges * 0.3;
+  float swirl = fbm(vec2(ang * 6.0 + uTime * 0.10, r * 9.0));
+  float ridges = fbm(vec2(ang * 14.0 - uTime * 0.06, r * 18.0));
+  float streaks = 0.6 + 0.4 * (swirl * 0.7 + ridges * 0.3);
 
-  float falloff = pow(smoothstep(1.0, 0.18, r), 1.7);
-  float corona = falloff * (0.45 + 0.9 * streaks) * coreCutoff;
+  // Sharp inverse-square-ish falloff so the glow doesn't smear across the sky.
+  float falloff = pow(smoothstep(1.0, photoR, r), 3.4);
+  float corona = falloff * streaks * coreCutoff;
 
-  vec3 cInner = vec3(2.4, 1.7, 0.7);
-  vec3 cOuter = vec3(1.3, 0.55, 0.18);
-  vec3 col = mix(cInner, cOuter, smoothstep(0.18, 1.0, r)) * corona;
+  vec3 cInner = vec3(1.6, 1.2, 0.55);
+  vec3 cOuter = vec3(0.9, 0.4, 0.12);
+  vec3 col = mix(cInner, cOuter, smoothstep(photoR, 1.0, r)) * corona;
 
-  // A subtle outer rim glow that's nearly white near the photosphere edge.
-  float rim = pow(smoothstep(0.30, 0.18, r), 4.0) * coreCutoff;
-  col += vec3(3.0, 2.6, 1.6) * rim;
+  // Tight rim glow right at the photosphere edge.
+  float rim = pow(smoothstep(photoR + 0.04, photoR, r), 5.0) * coreCutoff;
+  col += vec3(1.8, 1.4, 0.9) * rim;
 
-  gl_FragColor = vec4(col, clamp(corona + rim, 0.0, 1.0));
+  gl_FragColor = vec4(col, clamp(corona * 0.9 + rim, 0.0, 1.0));
 }
 `;
 
@@ -126,7 +130,7 @@ export function Sun() {
       uniforms: {
         uTex: { value: sunTex },
         uTime: { value: 0 },
-        uIntensity: { value: 6.0 },
+        uIntensity: { value: 2.4 },
       },
       toneMapped: true,
     });
@@ -179,7 +183,7 @@ export function Sun() {
         <primitive object={surfaceMat} attach="material" />
       </mesh>
       <mesh ref={coronaRef} renderOrder={5}>
-        <planeGeometry args={[SUN_RADIUS * 14, SUN_RADIUS * 14]} />
+        <planeGeometry args={[SUN_RADIUS * CORONA_SCALE, SUN_RADIUS * CORONA_SCALE]} />
         <primitive object={coronaMat} attach="material" />
       </mesh>
     </group>

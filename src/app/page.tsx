@@ -8,6 +8,7 @@ import { LayerToggles } from "@/components/ui/LayerToggles";
 import { ObjectInfoPanel } from "@/components/ui/ObjectInfoPanel";
 import { TopBar } from "@/components/ui/TopBar";
 import { ApodCard } from "@/components/ui/ApodCard";
+import { CameraFeed } from "@/components/ui/CameraFeed";
 import { HelpHint } from "@/components/ui/HelpHint";
 import { ZoomControls } from "@/components/ui/ZoomControls";
 import { CoordinateHUD } from "@/components/ui/CoordinateHUD";
@@ -56,6 +57,7 @@ function MobileTooltipDefault() {
 export default function Home() {
   return (
     <div className="fixed inset-0 overflow-hidden bg-black">
+      <CameraFeed />
       <Scene />
       <AimAtTodaysSun />
       <MobileTooltipDefault />

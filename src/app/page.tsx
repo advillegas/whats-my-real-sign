@@ -9,6 +9,7 @@ import { ObjectInfoPanel } from "@/components/ui/ObjectInfoPanel";
 import { TopBar } from "@/components/ui/TopBar";
 import { ApodCard } from "@/components/ui/ApodCard";
 import { CameraFeed } from "@/components/ui/CameraFeed";
+import { ARTargetIndicator } from "@/components/ui/ARTargetIndicator";
 import { HelpHint } from "@/components/ui/HelpHint";
 import { ZoomControls } from "@/components/ui/ZoomControls";
 import { CoordinateHUD } from "@/components/ui/CoordinateHUD";
@@ -63,7 +64,7 @@ export default function Home() {
       <MobileTooltipDefault />
       <UrlStateSync />
 
-      <header className="absolute top-0 inset-x-0 px-3 pt-3 sm:px-5 sm:pt-5 safe-top safe-left safe-right flex items-start justify-between gap-3 pointer-events-none z-10">
+      <header className="absolute top-0 inset-x-0 px-3 pt-3 sm:px-5 sm:pt-5 safe-top safe-left safe-right flex items-start justify-between gap-3 pointer-events-none z-30">
         <div className="pointer-events-auto">
           <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.28em] sm:tracking-[0.32em] text-white/55">
             What&apos;s My Real Sign
@@ -79,7 +80,7 @@ export default function Home() {
 
       <CoordinateHUD />
 
-      <div className="absolute top-14 sm:top-24 left-2 right-2 sm:left-5 sm:right-auto sm:max-w-sm pointer-events-auto z-10">
+      <div className="absolute top-16 sm:top-24 left-2 sm:left-5 right-2 sm:right-auto sm:max-w-sm pointer-events-auto z-10">
         <SignReveal />
       </div>
 
@@ -88,6 +89,7 @@ export default function Home() {
       </div>
 
       <ObjectInfoPanel />
+      <ARTargetIndicator />
 
       <div className="absolute bottom-2 sm:bottom-5 left-2 right-2 sm:left-5 sm:right-5 flex flex-col-reverse sm:flex-row items-stretch sm:items-end justify-between gap-2 sm:gap-4 pointer-events-none z-10 safe-bottom safe-left safe-right">
         <div className="pointer-events-auto">

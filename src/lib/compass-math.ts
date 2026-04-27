@@ -21,6 +21,7 @@ import { Euler, Quaternion, Vector3 } from "three";
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 
+const Y_AXIS = new Vector3(0, 1, 0);
 const Z_AXIS = new Vector3(0, 0, 1);
 // THREE's correction: a phone held vertical with its screen facing the user
 // has its back along world -Z, but the camera convention also looks down -Z.
@@ -33,6 +34,7 @@ const Q_PHONE_TO_WORLD = new Quaternion().setFromAxisAngle(
 const tmpEuler = new Euler();
 const tmpQ = new Quaternion();
 const tmpScreenQ = new Quaternion();
+const tmpHeadingQ = new Quaternion();
 const tmpDir = new Vector3();
 
 export interface OrientationInput {
@@ -47,6 +49,14 @@ export interface OrientationInput {
    * etc). Reads from `screen.orientation.angle` or `window.orientation`.
    */
   screenAngle: number;
+  /**
+   * Optional: device heading from TRUE north in degrees (clockwise), as
+   * reported by iOS Safari's `event.webkitCompassHeading`. When supplied
+   * we trust it over the alpha-derived heading — without this, iOS reports
+   * alpha relative to whatever orientation the page loaded in, so the
+   * synthetic sky ends up rotated by an arbitrary offset.
+   */
+  trueHeadingDeg?: number;
 }
 
 export interface AltAzDeg {
@@ -85,7 +95,7 @@ function deviceOrientationQuaternion(
   input: OrientationInput,
   outQ: Quaternion = new Quaternion(),
 ): Quaternion | null {
-  const { alpha, beta, gamma, screenAngle } = input;
+  const { alpha, beta, gamma, screenAngle, trueHeadingDeg } = input;
   if (alpha == null || beta == null || gamma == null) return null;
 
   tmpEuler.set(beta * DEG2RAD, alpha * DEG2RAD, -gamma * DEG2RAD, "YXZ");
@@ -93,6 +103,27 @@ function deviceOrientationQuaternion(
   outQ.multiply(Q_PHONE_TO_WORLD);
   tmpScreenQ.setFromAxisAngle(Z_AXIS, -screenAngle * DEG2RAD);
   outQ.multiply(tmpScreenQ);
+
+  // True-north correction. Compute the back-of-device direction with the
+  // current quaternion and figure out what heading it claims; rotate the
+  // world about its vertical axis (+Y in this frame) so the heading lines
+  // up with the device-reported true heading. This is what makes the
+  // synthetic sky actually align with the real sky on iOS, where alpha is
+  // referenced to whatever orientation the tab happened to load in.
+  if (typeof trueHeadingDeg === "number" && Number.isFinite(trueHeadingDeg)) {
+    tmpDir.set(0, 0, -1).applyQuaternion(outQ);
+    let currentAz = Math.atan2(tmpDir.x, -tmpDir.z);
+    if (currentAz < 0) currentAz += 2 * Math.PI;
+    const targetAz = trueHeadingDeg * DEG2RAD;
+    let delta = targetAz - currentAz;
+    if (delta > Math.PI) delta -= 2 * Math.PI;
+    else if (delta < -Math.PI) delta += 2 * Math.PI;
+    // Positive +Y rotation moves vectors counter-clockwise (decreasing
+    // azimuth). To increase azimuth by `delta`, rotate by -delta.
+    tmpHeadingQ.setFromAxisAngle(Y_AXIS, -delta);
+    outQ.premultiply(tmpHeadingQ);
+  }
+
   return outQ;
 }
 

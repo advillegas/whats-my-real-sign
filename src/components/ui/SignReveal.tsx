@@ -11,6 +11,7 @@ import {
   type ConstellationBoundary,
 } from "@/lib/constellations";
 import { useViewer } from "@/store/viewer-store";
+import { useIsTouch } from "@/lib/use-is-touch";
 import { SwipeDismiss } from "./SwipeDismiss";
 
 const PRECESSION_RATE_ARCSEC_PER_YR = 50.29;
@@ -26,9 +27,18 @@ function fmtYearLabel(jsYear: number): string {
 
 export function SignReveal() {
   const date = useViewer((s) => s.date);
+  const compassMode = useViewer((s) => s.compassMode);
+  const isTouch = useIsTouch();
   const [bounds, setBounds] = useState<ConstellationBoundary[] | null>(null);
-  const [open, setOpen] = useState(true);
+  // Start collapsed on phones / in AR mode so the tile doesn't crowd the
+  // search box and other top-bar controls. Desktop users still get the full
+  // explainer up front.
+  const [open, setOpen] = useState(() => !isTouch);
   const [showWhy, setShowWhy] = useState(false);
+
+  useEffect(() => {
+    if (compassMode) setOpen(false);
+  }, [compassMode]);
 
   useEffect(() => {
     let alive = true;

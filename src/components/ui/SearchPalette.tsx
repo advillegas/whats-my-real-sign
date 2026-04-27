@@ -66,7 +66,14 @@ export function SearchPalette() {
         dec = found.dec;
       }
     }
-    setCameraTarget(ra, dec, entry.kind === "constellation" ? 35 : 22);
+    // In AR mode the camera is locked to the device gyro, so a fly-to tween
+    // is meaningless — the on-screen ARTargetIndicator points the user
+    // toward the object instead. Skip the camera target nudge so we don't
+    // also force-zoom the synthetic FOV mid-search.
+    const inAr = useViewer.getState().compassMode;
+    if (!inAr) {
+      setCameraTarget(ra, dec, entry.kind === "constellation" ? 35 : 22);
+    }
     setSelected({
       id: entry.id,
       name: entry.name,

@@ -20,6 +20,7 @@ import { Horizon } from "./Horizon";
 import { BrightStarLabels } from "./BrightStarLabels";
 import { CameraRig } from "./CameraRig";
 import { CompassDriver } from "./CompassDriver";
+import { ARTargetTracker } from "./ARTargetTracker";
 import { Picker } from "./Picker";
 import { CoordinateHUDFeeder } from "@/components/ui/CoordinateHUD";
 import {
@@ -89,13 +90,15 @@ export function Scene() {
         background: compassMode ? "transparent" : "black",
         touchAction: "none",
         // In AR mode the WebGL layer becomes a translucent overlay so the
-        // user can see real sky behind the synthetic stars / labels.
-        opacity: compassMode ? 0.55 : 1,
+        // user can see real sky behind the synthetic stars / labels — but
+        // not so faint that the stars/lines vanish under bright daylight.
+        opacity: compassMode ? 0.82 : 1,
         transition: "opacity 320ms ease",
       }}
     >
       <CameraRig />
       <CompassDriver />
+      <ARTargetTracker />
       <CoordinateHUDFeeder />
       {/* Hide the painted Milky Way / procedural starfield in AR mode —
           they'd just smear over the real sky. Real catalog stars +
@@ -129,7 +132,7 @@ export function Scene() {
       {stars && dso && <Picker stars={stars} dso={dso} />}
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
-          intensity={compassMode ? 0.25 : isMobile ? 0.45 : 0.55}
+          intensity={compassMode ? 0.4 : isMobile ? 0.45 : 0.55}
           luminanceThreshold={0.95}
           luminanceSmoothing={0.25}
           mipmapBlur

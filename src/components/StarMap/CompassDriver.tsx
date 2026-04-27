@@ -75,11 +75,28 @@ export function CompassDriver() {
       const obs = state.observer;
       if (!obs) return;
 
+      // iOS Safari attaches `webkitCompassHeading` (true heading from north,
+      // degrees clockwise) — without it `alpha` is relative to whatever
+      // orientation the page loaded in, so the synthetic sky ends up rotated
+      // by an arbitrary offset and you can point at the Sun and not see it.
+      const ev = e as DeviceOrientationEvent & {
+        webkitCompassHeading?: number;
+        webkitCompassAccuracy?: number;
+      };
+      const trueHeadingDeg =
+        typeof ev.webkitCompassHeading === "number" &&
+        Number.isFinite(ev.webkitCompassHeading) &&
+        // -1 / accuracy<0 means "uncalibrated, don't trust me".
+        (ev.webkitCompassAccuracy === undefined || ev.webkitCompassAccuracy >= 0)
+          ? ev.webkitCompassHeading
+          : undefined;
+
       const lookUp = deviceOrientationToLookUp({
         alpha: e.alpha,
         beta: e.beta,
         gamma: e.gamma,
         screenAngle,
+        trueHeadingDeg,
       });
       if (!lookUp) return;
 

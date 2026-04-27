@@ -10,6 +10,7 @@ import { TopBar } from "@/components/ui/TopBar";
 import { ApodCard } from "@/components/ui/ApodCard";
 import { CameraFeed } from "@/components/ui/CameraFeed";
 import { ARTargetIndicator } from "@/components/ui/ARTargetIndicator";
+import { ARCalibrationOverlay } from "@/components/ui/ARCalibrationOverlay";
 import { HelpHint } from "@/components/ui/HelpHint";
 import { ZoomControls } from "@/components/ui/ZoomControls";
 import { CoordinateHUD } from "@/components/ui/CoordinateHUD";
@@ -90,6 +91,7 @@ export default function Home() {
 
       <ObjectInfoPanel />
       <ARTargetIndicator />
+      <ARCalibrationOverlay />
 
       <div className="absolute bottom-2 sm:bottom-5 left-2 right-2 sm:left-5 sm:right-5 flex flex-col-reverse sm:flex-row items-stretch sm:items-end justify-between gap-2 sm:gap-4 pointer-events-none z-10 safe-bottom safe-left safe-right">
         <div className="pointer-events-auto">

@@ -50,13 +50,14 @@ export interface OrientationInput {
    */
   screenAngle: number;
   /**
-   * Optional: device heading from TRUE north in degrees (clockwise), as
-   * reported by iOS Safari's `event.webkitCompassHeading`. When supplied
-   * we trust it over the alpha-derived heading — without this, iOS reports
-   * alpha relative to whatever orientation the page loaded in, so the
-   * synthetic sky ends up rotated by an arbitrary offset.
+   * Manual user-applied yaw correction in radians, rotating the synthetic
+   * sky around the local zenith. Lets the user drag the AR overlay to
+   * align it with reality — alpha is referenced to whatever orientation
+   * the page loaded in on iOS (and even on Android with absolute events
+   * the magnetometer can be off by 5–15° depending on local interference),
+   * so a manual nudge knob is the only fully reliable calibration.
    */
-  trueHeadingDeg?: number;
+  yawOffsetRad?: number;
 }
 
 export interface AltAzDeg {
@@ -95,7 +96,7 @@ function deviceOrientationQuaternion(
   input: OrientationInput,
   outQ: Quaternion = new Quaternion(),
 ): Quaternion | null {
-  const { alpha, beta, gamma, screenAngle, trueHeadingDeg } = input;
+  const { alpha, beta, gamma, screenAngle, yawOffsetRad } = input;
   if (alpha == null || beta == null || gamma == null) return null;
 
   tmpEuler.set(beta * DEG2RAD, alpha * DEG2RAD, -gamma * DEG2RAD, "YXZ");
@@ -104,23 +105,12 @@ function deviceOrientationQuaternion(
   tmpScreenQ.setFromAxisAngle(Z_AXIS, -screenAngle * DEG2RAD);
   outQ.multiply(tmpScreenQ);
 
-  // True-north correction. Compute the back-of-device direction with the
-  // current quaternion and figure out what heading it claims; rotate the
-  // world about its vertical axis (+Y in this frame) so the heading lines
-  // up with the device-reported true heading. This is what makes the
-  // synthetic sky actually align with the real sky on iOS, where alpha is
-  // referenced to whatever orientation the tab happened to load in.
-  if (typeof trueHeadingDeg === "number" && Number.isFinite(trueHeadingDeg)) {
-    tmpDir.set(0, 0, -1).applyQuaternion(outQ);
-    let currentAz = Math.atan2(tmpDir.x, -tmpDir.z);
-    if (currentAz < 0) currentAz += 2 * Math.PI;
-    const targetAz = trueHeadingDeg * DEG2RAD;
-    let delta = targetAz - currentAz;
-    if (delta > Math.PI) delta -= 2 * Math.PI;
-    else if (delta < -Math.PI) delta += 2 * Math.PI;
-    // Positive +Y rotation moves vectors counter-clockwise (decreasing
-    // azimuth). To increase azimuth by `delta`, rotate by -delta.
-    tmpHeadingQ.setFromAxisAngle(Y_AXIS, -delta);
+  // User-supplied calibration nudge. Premultiplying rotates the result
+  // around +Y in the local-up frame, so the back-of-device azimuth shifts
+  // by `yawOffsetRad`. (Positive +Y rotation moves vectors counter-
+  // clockwise / decreasing azimuth, hence the negation.)
+  if (yawOffsetRad && Number.isFinite(yawOffsetRad)) {
+    tmpHeadingQ.setFromAxisAngle(Y_AXIS, -yawOffsetRad);
     outQ.premultiply(tmpHeadingQ);
   }
 

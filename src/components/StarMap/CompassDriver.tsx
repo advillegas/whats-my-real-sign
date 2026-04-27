@@ -58,8 +58,12 @@ export function CompassDriver() {
   useEffect(() => {
     if (!compassMode) {
       compassState.hasReading = false;
+      compassState.yawOffsetRad = 0;
       return;
     }
+    // Fresh AR session → start with no calibration offset; the user can
+    // drag to nudge.
+    compassState.yawOffsetRad = 0;
     if (typeof window === "undefined") return;
     if (typeof DeviceOrientationEvent === "undefined") return;
 
@@ -75,28 +79,17 @@ export function CompassDriver() {
       const obs = state.observer;
       if (!obs) return;
 
-      // iOS Safari attaches `webkitCompassHeading` (true heading from north,
-      // degrees clockwise) — without it `alpha` is relative to whatever
-      // orientation the page loaded in, so the synthetic sky ends up rotated
-      // by an arbitrary offset and you can point at the Sun and not see it.
-      const ev = e as DeviceOrientationEvent & {
-        webkitCompassHeading?: number;
-        webkitCompassAccuracy?: number;
-      };
-      const trueHeadingDeg =
-        typeof ev.webkitCompassHeading === "number" &&
-        Number.isFinite(ev.webkitCompassHeading) &&
-        // -1 / accuracy<0 means "uncalibrated, don't trust me".
-        (ev.webkitCompassAccuracy === undefined || ev.webkitCompassAccuracy >= 0)
-          ? ev.webkitCompassHeading
-          : undefined;
-
       const lookUp = deviceOrientationToLookUp({
         alpha: e.alpha,
         beta: e.beta,
         gamma: e.gamma,
         screenAngle,
-        trueHeadingDeg,
+        // User-applied calibration: a single horizontal yaw offset that
+        // the AR drag handler in `CameraRig` mutates live. Without this,
+        // alpha is relative to the orientation the page loaded in (iOS),
+        // so the synthetic sky is rotated by an arbitrary offset and a
+        // perfectly-aimed phone can have its target completely off-screen.
+        yawOffsetRad: compassState.yawOffsetRad,
       });
       if (!lookUp) return;
 

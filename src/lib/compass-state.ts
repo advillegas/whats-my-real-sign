@@ -28,6 +28,13 @@ export const compassState: {
   hasReading: boolean;
   /** Wall-clock millis of the most recent successful update. */
   lastUpdateMs: number;
+  /**
+   * User-applied yaw correction in radians, around the local zenith.
+   * Updated live by the AR drag handler in `CameraRig` so the user can
+   * nudge the synthetic sky into alignment with reality. Reset to 0 when
+   * AR mode toggles.
+   */
+  yawOffsetRad: number;
 } = {
   qx: 0,
   qy: 0,
@@ -35,4 +42,5 @@ export const compassState: {
   qw: 1,
   hasReading: false,
   lastUpdateMs: 0,
+  yawOffsetRad: 0,
 };

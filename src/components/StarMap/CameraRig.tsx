@@ -100,9 +100,11 @@ export function CameraRig() {
       } catch {
         /* noop */
       }
-      // While compass mode is active we still want pinch-to-zoom but not
-      // drag-to-look — the device gyro owns yaw/pitch.
-      if (pointers.current.size === 1 && !compassModeRef.current) {
+      // Single-pointer drag is captured in both modes. In normal mode it
+      // updates yaw/pitch; in AR mode it nudges the heading-calibration
+      // offset so the user can drag the synthetic sky into alignment with
+      // the real one.
+      if (pointers.current.size === 1) {
         dragging.current = true;
         lastPos.current = { x: e.clientX, y: e.clientY };
         pinch.current = null;
@@ -132,13 +134,20 @@ export function CameraRig() {
       }
 
       if (!dragging.current) return;
-      if (compassModeRef.current) return;
       const dx = e.clientX - lastPos.current.x;
       const dy = e.clientY - lastPos.current.y;
       lastPos.current = { x: e.clientX, y: e.clientY };
       // Sensitivity scales with FOV so a finger sweep at 12° feels the same
       // as at 90°.
       const fovScale = "fov" in camera ? (camera as { fov: number }).fov / 55 : 1;
+      if (compassModeRef.current) {
+        // Calibration nudge. Only the horizontal component matters: the
+        // gyro-derived pitch is gravity-referenced and accurate, but the
+        // heading from north is the part that drifts (especially on iOS
+        // where alpha is referenced to whenever the page loaded).
+        compassState.yawOffsetRad -= dx * DRAG_SENSITIVITY * fovScale;
+        return;
+      }
       yp.current.yaw -= dx * DRAG_SENSITIVITY * fovScale;
       yp.current.pitch += dy * DRAG_SENSITIVITY * fovScale;
       yp.current.pitch = clamp(yp.current.pitch, -PITCH_LIMIT, PITCH_LIMIT);
@@ -156,8 +165,9 @@ export function CameraRig() {
       }
       if (pointers.current.size === 0) {
         dragging.current = false;
-      } else if (pointers.current.size === 1 && !compassModeRef.current) {
-        // Resume drag from the surviving touch.
+      } else if (pointers.current.size === 1) {
+        // Resume single-pointer drag from the surviving touch (calibration
+        // in AR mode, look-around in normal mode).
         dragging.current = true;
         const [pt] = pointers.current.values();
         lastPos.current = { x: pt.x, y: pt.y };

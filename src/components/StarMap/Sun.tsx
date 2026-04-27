@@ -22,8 +22,8 @@ import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
 
-const SUN_RADIUS = 10;
-const CORONA_SCALE = 3.4;
+const SUN_RADIUS = 6;
+const CORONA_SCALE = 2.4;
 
 const SURFACE_VS = /* glsl */ `
 varying vec2 vUv;
@@ -86,28 +86,28 @@ void main() {
   float r = length(uv) * 2.0;
   if (r > 1.0) discard;
 
-  // The photosphere occupies 1 / CORONA_SCALE of the quad, so the corona
-  // should start just outside that radius (~0.30 in normalized r).
-  float photoR = 0.30;
-  float coreCutoff = smoothstep(photoR, photoR + 0.02, r);
+  // Photosphere occupies 1/CORONA_SCALE of the half-quad. CORONA_SCALE = 2.4
+  // → photoR = 1/2.4 ≈ 0.417.
+  float photoR = 0.417;
+  float coreCutoff = smoothstep(photoR, photoR + 0.015, r);
   float ang = atan(uv.y, uv.x);
-  float swirl = fbm(vec2(ang * 6.0 + uTime * 0.10, r * 9.0));
-  float ridges = fbm(vec2(ang * 14.0 - uTime * 0.06, r * 18.0));
-  float streaks = 0.6 + 0.4 * (swirl * 0.7 + ridges * 0.3);
+  float swirl = fbm(vec2(ang * 6.0 + uTime * 0.10, r * 12.0));
+  float ridges = fbm(vec2(ang * 14.0 - uTime * 0.06, r * 22.0));
+  float streaks = 0.55 + 0.45 * (swirl * 0.7 + ridges * 0.3);
 
-  // Sharp inverse-square-ish falloff so the glow doesn't smear across the sky.
-  float falloff = pow(smoothstep(1.0, photoR, r), 3.4);
-  float corona = falloff * streaks * coreCutoff;
+  // Steep falloff: by halfway between disc edge and quad edge, glow is gone.
+  float falloff = pow(smoothstep(1.0, photoR, r), 5.0);
+  float corona = falloff * streaks * coreCutoff * 0.55;
 
-  vec3 cInner = vec3(1.6, 1.2, 0.55);
-  vec3 cOuter = vec3(0.9, 0.4, 0.12);
+  vec3 cInner = vec3(1.4, 1.0, 0.45);
+  vec3 cOuter = vec3(0.7, 0.30, 0.10);
   vec3 col = mix(cInner, cOuter, smoothstep(photoR, 1.0, r)) * corona;
 
-  // Tight rim glow right at the photosphere edge.
-  float rim = pow(smoothstep(photoR + 0.04, photoR, r), 5.0) * coreCutoff;
-  col += vec3(1.8, 1.4, 0.9) * rim;
+  // Tight chromosphere rim right at the photosphere edge.
+  float rim = pow(smoothstep(photoR + 0.025, photoR, r), 6.0) * coreCutoff;
+  col += vec3(1.4, 1.05, 0.6) * rim;
 
-  gl_FragColor = vec4(col, clamp(corona * 0.9 + rim, 0.0, 1.0));
+  gl_FragColor = vec4(col, clamp(corona + rim, 0.0, 1.0));
 }
 `;
 
@@ -131,7 +131,7 @@ export function Sun() {
       uniforms: {
         uTex: { value: sunTex },
         uTime: { value: 0 },
-        uIntensity: { value: 2.4 },
+        uIntensity: { value: 1.35 },
       },
       toneMapped: true,
     });

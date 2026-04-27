@@ -11,8 +11,8 @@
 
 import { useMemo, useRef } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import {
-  AdditiveBlending,
   Color,
   DoubleSide,
   RepeatWrapping,
@@ -287,25 +287,29 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHo
           <primitive object={ringMaterial} attach="material" />
         </mesh>
       )}
-      {style.atmosphere && (
-        <mesh>
-          <sphereGeometry args={[style.size * 1.04, 32, 32]} />
-          <shaderMaterial
-            transparent
-            depthWrite={false}
-            blending={AdditiveBlending}
-            toneMapped
-            uniforms={{
-              uAtmo: {
-                value: new Color(style.atmosphere[0], style.atmosphere[1], style.atmosphere[2]),
-              },
-              uSunWorld: { value: sunVec },
-            }}
-            vertexShader={`varying vec3 vN; varying vec3 vW; void main(){vN=normalize(normalMatrix*normal); vec4 wp=modelMatrix*vec4(position,1.0); vW=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp;}`}
-            fragmentShader={`precision highp float; varying vec3 vN; varying vec3 vW; uniform vec3 uAtmo; uniform vec3 uSunWorld; void main(){ vec3 V=normalize(cameraPosition-vW); vec3 L=normalize(uSunWorld-vW); float fres=pow(1.0-max(dot(V,vN),0.0),3.5); float ndl=max(dot(vN,L),0.0); float a=fres*ndl*0.55; gl_FragColor=vec4(uAtmo*a,a);} `}
-          />
-        </mesh>
-      )}
+      <Html
+        position={[0, style.size * 1.4, 0]}
+        center
+        zIndexRange={[5, 0]}
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--font-sans, system-ui)",
+            fontSize: 10.5,
+            fontWeight: 500,
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            color: "rgba(255, 220, 170, 0.9)",
+            background: "transparent",
+            textShadow: "0 0 6px rgba(0,0,0,0.85)",
+            whiteSpace: "nowrap",
+            userSelect: "none",
+          }}
+        >
+          {id}
+        </div>
+      </Html>
     </group>
   );
 }

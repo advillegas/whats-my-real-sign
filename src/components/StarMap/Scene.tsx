@@ -66,11 +66,11 @@ export function Scene() {
       {stars && dso && <Hover stars={stars} dso={dso} />}
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
-          intensity={0.6}
-          luminanceThreshold={0.85}
-          luminanceSmoothing={0.25}
+          intensity={0.5}
+          luminanceThreshold={1.1}
+          luminanceSmoothing={0.2}
           mipmapBlur
-          radius={0.5}
+          radius={0.35}
         />
         <Vignette eskil={false} offset={0.2} darkness={0.55} />
         <SMAA />

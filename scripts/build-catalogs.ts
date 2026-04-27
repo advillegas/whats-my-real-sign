@@ -153,7 +153,14 @@ function buildStars(csv: string, magLimit: number): StarRecord[] {
     const con = r[iCon]?.trim();
     const hip = r[iHip]?.trim();
     const hd = r[iHd]?.trim();
-    const id = hip ? `HIP${hip}` : hd ? `HD${hd}` : `HYG${r[iId]}`;
+    // The HYG catalog includes the Sun as entry id=0 ("Sol", mag -26.7) parked
+    // at RA=0, Dec=0. We render the Sun ourselves with a textured photosphere
+    // and corona, so skip the catalog entry — otherwise it shows up as a
+    // 25-magnitude-brighter-than-Sirius "star" stuck in Pisces.
+    const hygId = r[iId]?.trim();
+    if (hygId === "0" || (proper && proper.toLowerCase() === "sol")) continue;
+    if (mag < -10) continue;
+    const id = hip ? `HIP${hip}` : hd ? `HD${hd}` : `HYG${hygId}`;
     const star: StarRecord = {
       id,
       ra: round(ra, 5),

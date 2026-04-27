@@ -12,10 +12,30 @@ import {
 } from "@/lib/constellations";
 import { useViewer } from "@/store/viewer-store";
 
+// IAU 2006 general precession in longitude (Lieske et al.) — ~50.29″/yr at J2000.
+// One full precession cycle (Platonic year) is ~25,772 years.
+const PRECESSION_RATE_ARCSEC_PER_YR = 50.29;
+const PRECESSION_PERIOD_YR = 25772;
+const YEARS_PER_DEGREE = 3600 / PRECESSION_RATE_ARCSEC_PER_YR; // ~71.58
+// Babylonian astronomers systematized the 12-sign tropical zodiac in the
+// 5th–4th century BCE; we anchor the "Babylonian baseline" at 500 BCE.
+const BABYLONIAN_REF_YEAR = -500;
+// Earth's mean obliquity of the ecliptic at J2000 (degrees).
+const OBLIQUITY_DEG = 23.44;
+// Equatorial bulge: Earth's equatorial radius minus its polar radius (km).
+const EQUATORIAL_BULGE_KM = 21.4;
+
+function fmtYearLabel(jsYear: number): string {
+  return jsYear >= 1
+    ? `${jsYear} CE`
+    : `${1 - jsYear} BCE`;
+}
+
 export function SignReveal() {
   const date = useViewer((s) => s.date);
   const [bounds, setBounds] = useState<ConstellationBoundary[] | null>(null);
   const [open, setOpen] = useState(true);
+  const [showWhy, setShowWhy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -36,6 +56,23 @@ export function SignReveal() {
   const realName = real?.name ?? real?.desig ?? "—";
   const matches =
     tropical && realName.toLowerCase().startsWith(tropical.name.toLowerCase().slice(0, 4));
+
+  const userJsYear = date.getFullYear();
+  const yearsFromBabylonian = userJsYear - BABYLONIAN_REF_YEAR;
+  const cumulativeDriftDeg =
+    (yearsFromBabylonian * PRECESSION_RATE_ARCSEC_PER_YR) / 3600;
+  const driftAbs = Math.abs(cumulativeDriftDeg);
+  const yearsAbs = Math.abs(yearsFromBabylonian);
+  const driftMagnitudeLabel =
+    driftAbs < 1
+      ? "less than a degree"
+      : driftAbs < 15
+      ? "a fraction of a sign"
+      : driftAbs < 30
+      ? "almost a full zodiac sign"
+      : driftAbs < 60
+      ? "more than a full zodiac sign"
+      : `${(driftAbs / 30).toFixed(1)} zodiac signs`;
 
   return (
     <AnimatePresence mode="wait" initial={false}>
@@ -85,6 +122,100 @@ export function SignReveal() {
               {sun.ra.toFixed(2)}h • Dec {sun.dec.toFixed(2)}°
             </span>
           </div>
+
+          {!matches && tropical && (
+            <button
+              onClick={() => setShowWhy((v) => !v)}
+              aria-expanded={showWhy}
+              className="mt-2 text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-blue-200/80 hover:text-blue-100 transition flex items-center gap-1 self-start"
+            >
+              <span>{showWhy ? "Hide the science" : "Why is this different from my horoscope?"}</span>
+              <span className={`transition-transform ${showWhy ? "rotate-90" : ""}`}>›</span>
+            </button>
+          )}
+
+          <AnimatePresence initial={false}>
+            {showWhy && tropical && (
+              <motion.div
+                key="why"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 pt-3 border-t border-white/10 text-[11px] sm:text-[12px] text-white/75 leading-relaxed space-y-2">
+                  <p>
+                    The 12 zodiac signs were systematized by Babylonian
+                    astronomers in the 5th–4th century BCE, who divided the
+                    ecliptic into twelve equal{" "}
+                    <span className="text-white">30°</span> sectors named for
+                    the constellations the Sun passed through at that time.
+                    Today is{" "}
+                    <span className="text-white">{fmtYearLabel(userJsYear)}</span>
+                    {" "}—{" "}
+                    <span className="text-white">
+                      ~{yearsAbs.toLocaleString()} years
+                    </span>{" "}
+                    {yearsFromBabylonian >= 0 ? "after" : "before"} that
+                    Babylonian baseline.
+                  </p>
+
+                  <p>
+                    Earth&apos;s rotational axis is tilted{" "}
+                    <span className="text-white">{OBLIQUITY_DEG}°</span> from
+                    its orbital plane, and Earth is slightly oblate — about{" "}
+                    <span className="text-white">{EQUATORIAL_BULGE_KM} km</span>{" "}
+                    wider at the equator than between the poles. The Sun and
+                    Moon pull on this equatorial bulge, applying a torque that
+                    makes the spin axis trace a slow cone in space. This is
+                    the <span className="text-amber-200">precession of the equinoxes</span>,
+                    completing one full revolution every{" "}
+                    <span className="text-white">
+                      {PRECESSION_PERIOD_YR.toLocaleString()} years
+                    </span>{" "}
+                    (a &quot;Great Year&quot;).
+                  </p>
+
+                  <p>
+                    The vernal equinox — the Sun&apos;s position on the first
+                    day of northern spring — drifts westward along the ecliptic
+                    at{" "}
+                    <span className="text-white">
+                      {PRECESSION_RATE_ARCSEC_PER_YR}″/year
+                    </span>
+                    , or{" "}
+                    <span className="text-white">
+                      1° every {YEARS_PER_DEGREE.toFixed(1)} years
+                    </span>
+                    . Over the {yearsAbs.toLocaleString()} years separating
+                    this date from Babylonian times, that adds up to{" "}
+                    <span className="text-amber-200">
+                      {driftAbs.toFixed(1)}°
+                    </span>{" "}
+                    of drift — {driftMagnitudeLabel}.
+                  </p>
+
+                  <p>
+                    That&apos;s why the Sun is actually in front of{" "}
+                    <span className="text-blue-200">{realName}</span> on a
+                    date that horoscopes — using boundaries fixed ~2,500 years
+                    ago — still call{" "}
+                    <span className="text-amber-200">{tropical.name}</span>.
+                    The signs didn&apos;t move; the sky did.
+                  </p>
+
+                  <p className="text-white/45 text-[10px] leading-snug pt-1">
+                    Polaris is currently Earth&apos;s pole star; in ~12,000 years
+                    Vega will take over as the axis precesses. The torque
+                    formula was first worked out by Newton in the{" "}
+                    <i>Principia</i> (1687); Hipparchus discovered the effect
+                    observationally around 129 BCE.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       ) : (
         <motion.button

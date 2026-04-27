@@ -2,12 +2,21 @@
 
 /**
  * Procedural Milky Way + deep-space background, drawn on the inside of a sphere
- * surrounding the camera. The shader concentrates a soft warm glow along the
- * galactic plane (defined by the J2000 galactic-pole direction) and adds a
- * subtle blue nebula gradient so the sky never looks pure black.
+ * surrounding the camera.
  *
- * No texture asset required — keeps the bundle tiny and looks pleasingly
- * "starmap-y" without faking a NASA photo we don't license.
+ * The shader works in galactic coordinates: it transforms the equatorial
+ * direction into the galactic frame, then builds the brightness field as:
+ *
+ *   - A Gaussian-fall-off "disk" centered on the galactic plane.
+ *   - A bulge concentrated near the galactic center (+ a thinner halo outward).
+ *   - Multi-octave fbm noise modulating disk thickness + intensity to suggest
+ *     star fields and clumps.
+ *   - A "dust lane" mask carved out of the disk near the plane to give it the
+ *     classic dark spine.
+ *   - A subtle blue ambient gradient + faint warm Zodiacal glow toward the sun.
+ *
+ * No textures required, but the result is a believable galaxy stripe rather
+ * than blotchy noise. Bloom further bumps the brightest fluctuations.
  */
 
 import { useMemo } from "react";
@@ -15,10 +24,11 @@ import { BackSide, ShaderMaterial, SphereGeometry } from "three";
 import { useViewer } from "@/store/viewer-store";
 import { CELESTIAL_RADIUS } from "@/lib/coordinates";
 
-// J2000 direction of the north galactic pole (RA 12h 51m 26s, Dec +27.13°).
-const GAL_POLE_X = -0.054876;
-const GAL_POLE_Y = 0.494109;
-const GAL_POLE_Z = -0.867666;
+// J2000 → galactic rotation (rows = X', Y', Z' in J2000 components).
+// From: https://en.wikipedia.org/wiki/Galactic_coordinate_system#Conversion_between_equatorial_and_galactic_coordinates
+const GAL_X = [-0.0548755604, -0.8734370902, -0.4838350155];
+const GAL_Y = [0.4941094279, -0.4448296300, 0.7469822445];
+const GAL_Z = [-0.8676661490, -0.1980763734, 0.4559837762];
 
 const VS = /* glsl */ `
 varying vec3 vDir;
@@ -29,8 +39,12 @@ void main() {
 `;
 
 const FS = /* glsl */ `
+precision highp float;
 varying vec3 vDir;
-uniform vec3 uGalPole;
+
+uniform vec3 uGalX;
+uniform vec3 uGalY;
+uniform vec3 uGalZ;
 uniform float uIntensity;
 
 float hash(vec3 p) {
@@ -38,8 +52,7 @@ float hash(vec3 p) {
   p *= 17.0;
   return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
-
-float noise(vec3 p) {
+float vnoise(vec3 p) {
   vec3 i = floor(p);
   vec3 f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -51,32 +64,72 @@ float noise(vec3 p) {
     f.z);
   return n;
 }
+float fbm(vec3 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 6; i++) {
+    v += a * vnoise(p);
+    p *= 2.07;
+    a *= 0.5;
+  }
+  return v;
+}
 
 void main() {
   vec3 d = normalize(vDir);
-  float galLat = abs(dot(d, normalize(uGalPole)));
-  // distance to galactic plane in [0..1]; small near plane.
-  float planeProx = pow(1.0 - galLat, 4.0);
 
-  // Multiscale noise to add structure to the bulge / dust lanes.
-  float n1 = noise(d * 6.0);
-  float n2 = noise(d * 22.0);
-  float n3 = noise(d * 70.0);
-  float band = planeProx * (0.55 + 0.6 * n1 + 0.3 * n2 + 0.18 * n3);
+  // Equatorial → galactic frame.
+  vec3 g = vec3(dot(uGalX, d), dot(uGalY, d), dot(uGalZ, d));
 
-  // Bulge (toward galactic center, which is at gal lon = 0, lat = 0;
-  // direction in equatorial J2000 ≈ Sgr A*: RA 17h45m, Dec -28.93°).
-  vec3 galCenter = normalize(vec3(-0.054876, -0.873437, -0.483835));
-  float center = pow(max(0.0, dot(d, galCenter)), 8.0);
+  float galLat = asin(clamp(g.z, -1.0, 1.0));        // -π/2..π/2
+  float galLon = atan(g.y, g.x);                      // -π..π
 
-  vec3 milky = vec3(1.0, 0.92, 0.78);
-  vec3 lane = vec3(0.18, 0.10, 0.05);
-  vec3 bg = mix(vec3(0.005, 0.008, 0.02), vec3(0.02, 0.025, 0.06), 0.5 + 0.5 * d.y);
+  // Disk profile: Gaussian falloff in latitude. Use a wider profile near
+  // the galactic center and tighter further out.
+  float distGC = length(vec2(galLon, 0.0));
+  float diskThickness = 0.07 + 0.03 * smoothstep(3.14, 0.0, distGC);
+  float disk = exp(-(galLat * galLat) / (2.0 * diskThickness * diskThickness));
 
-  vec3 col = bg;
-  col += milky * band * 0.18 * uIntensity;
-  col += milky * center * 0.45 * uIntensity;
-  col -= lane * planeProx * (1.0 - n2) * 0.12 * uIntensity;
+  // Bulge near galactic center.
+  float angDistGC = acos(clamp(g.x, -1.0, 1.0));
+  float bulge = exp(-pow(angDistGC / 0.55, 2.0)) * 0.9;
+  // Subtle far-side bulge (anti-center) for symmetry.
+  float anti = exp(-pow((3.14159 - angDistGC) / 1.6, 2.0)) * 0.06;
+
+  // Multi-octave noise for star clumps and clouds. Use galactic xy + lat
+  // so structure stays anchored to the disk.
+  float n1 = fbm(vec3(galLon * 1.4, galLat * 8.0, 1.7));
+  float n2 = fbm(vec3(galLon * 4.0, galLat * 22.0, 4.3));
+  float n3 = fbm(vec3(galLon * 12.0, galLat * 60.0, 9.1));
+  float clumps = 0.45 + 0.55 * (n1 * 0.55 + n2 * 0.3 + n3 * 0.15);
+
+  // Dust lane: a darker stripe near the plane modulated by noise.
+  float laneCore = exp(-(galLat * galLat) / 0.0008);
+  float laneNoise = fbm(vec3(galLon * 3.5, galLat * 50.0, 7.7));
+  float dust = laneCore * smoothstep(0.4, 0.85, laneNoise);
+
+  // Color mixes.
+  vec3 milkyCool = vec3(0.55, 0.70, 1.00);   // outer arms, blue
+  vec3 milkyWarm = vec3(1.00, 0.90, 0.78);   // disk core
+  vec3 bulgeCol  = vec3(1.10, 0.85, 0.55);   // central bulge yellow-orange
+  vec3 laneCol   = vec3(0.10, 0.05, 0.02);
+
+  // Ambient sky: dark blue with a slight gradient.
+  float skyGrad = 0.5 + 0.5 * d.y;
+  vec3 sky = mix(vec3(0.004, 0.006, 0.018), vec3(0.012, 0.018, 0.045), skyGrad);
+
+  vec3 col = sky;
+  // Disk = warm core fading to cool outer + clumpy structure.
+  vec3 diskCol = mix(milkyCool, milkyWarm, smoothstep(2.5, 0.0, distGC));
+  col += diskCol * disk * clumps * 0.55 * uIntensity;
+  col += bulgeCol * bulge * 0.95 * uIntensity;
+  col += milkyCool * anti * uIntensity;
+  // Carve out dust.
+  col -= laneCol * dust * 0.9;
+  // Tiny background "field star" twinkle so the off-plane sky isn't dead.
+  float dust2 = smoothstep(0.85, 1.0, fbm(d * 95.0));
+  col += vec3(0.6, 0.7, 0.9) * dust2 * 0.05;
+
   col = max(col, vec3(0.0));
   gl_FragColor = vec4(col, 1.0);
 }
@@ -85,14 +138,17 @@ void main() {
 export function MilkyWay() {
   const visible = useViewer((s) => s.layers.milkyway);
   const { geometry, material } = useMemo(() => {
-    const geo = new SphereGeometry(CELESTIAL_RADIUS * 0.99, 64, 32);
+    const geo = new SphereGeometry(CELESTIAL_RADIUS * 0.99, 96, 48);
     const mat = new ShaderMaterial({
       vertexShader: VS,
       fragmentShader: FS,
       side: BackSide,
       depthWrite: false,
+      toneMapped: true,
       uniforms: {
-        uGalPole: { value: [GAL_POLE_X, GAL_POLE_Y, GAL_POLE_Z] },
+        uGalX: { value: GAL_X },
+        uGalY: { value: GAL_Y },
+        uGalZ: { value: GAL_Z },
         uIntensity: { value: 1.0 },
       },
     });

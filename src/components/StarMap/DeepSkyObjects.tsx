@@ -45,16 +45,17 @@ void main() {
 `;
 
 const FS = /* glsl */ `
+precision highp float;
 varying vec3 vColor;
 void main() {
   vec2 c = gl_PointCoord - vec2(0.5);
   float r = length(c) * 2.0;
   if (r > 1.0) discard;
-  // Ring marker: bright ring + soft inner glow
-  float ring = smoothstep(1.0, 0.85, r) - smoothstep(0.85, 0.65, r);
-  float glow = (1.0 - r) * 0.35;
-  float a = clamp(ring * 0.85 + glow, 0.0, 1.0);
-  gl_FragColor = vec4(vColor, a);
+  // Soft nebulous puff with a slightly brighter core. Bloom does the rest.
+  float core = exp(-r * r * 6.0);
+  float halo = pow(1.0 - r, 2.5);
+  float intensity = core * 1.4 + halo * 0.5;
+  gl_FragColor = vec4(vColor * intensity * 0.7, intensity);
 }
 `;
 

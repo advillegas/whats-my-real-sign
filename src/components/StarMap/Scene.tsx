@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import { ACESFilmicToneMapping, SRGBColorSpace } from "three";
+import { EffectComposer, Bloom, Vignette, SMAA } from "@react-three/postprocessing";
 import { Stars } from "./Stars";
 import { MilkyWay } from "./MilkyWay";
 import { ConstellationLines } from "./ConstellationLines";
@@ -32,8 +34,16 @@ export function Scene() {
 
   return (
     <Canvas
-      gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
+      gl={{
+        antialias: false,
+        alpha: false,
+        powerPreference: "high-performance",
+        toneMapping: ACESFilmicToneMapping,
+        toneMappingExposure: 1.0,
+        outputColorSpace: SRGBColorSpace,
+      }}
       camera={{ fov: 55, near: 0.1, far: 5000, position: [0, 0, 0] }}
+      dpr={[1, 2]}
       style={{ position: "fixed", inset: 0, background: "black", touchAction: "none" }}
     >
       <CameraRig />
@@ -46,6 +56,17 @@ export function Scene() {
       <Sun />
       <Planets />
       {stars && dso && <Picker stars={stars} dso={dso} />}
+      <EffectComposer multisampling={0} enableNormalPass={false}>
+        <Bloom
+          intensity={1.4}
+          luminanceThreshold={0.18}
+          luminanceSmoothing={0.5}
+          mipmapBlur
+          radius={0.85}
+        />
+        <Vignette eskil={false} offset={0.18} darkness={0.65} />
+        <SMAA />
+      </EffectComposer>
     </Canvas>
   );
 }

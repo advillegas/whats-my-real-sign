@@ -43,7 +43,7 @@ export function ObjectInfoPanel() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 40 }}
           transition={{ duration: 0.25 }}
-          className="glass fixed inset-x-2 bottom-20 sm:inset-x-auto sm:bottom-auto sm:top-24 sm:right-5 rounded-2xl p-4 sm:max-w-sm sm:w-[22rem] flex flex-col gap-3 z-30 max-h-[55vh] sm:max-h-[70vh] overflow-y-auto scrollbar-none safe-left safe-right"
+          className="glass fixed inset-x-2 bottom-20 sm:inset-x-auto sm:bottom-auto sm:top-24 sm:right-5 rounded-2xl p-4 sm:max-w-sm sm:w-[22rem] flex flex-col gap-3 z-40 max-h-[55vh] sm:max-h-[70vh] overflow-y-auto scrollbar-none safe-left safe-right shadow-2xl"
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">

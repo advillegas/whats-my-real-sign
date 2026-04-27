@@ -9,6 +9,7 @@
 
 import { useMemo, useRef } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import {
   Color,
   DoubleSide,
@@ -159,9 +160,7 @@ export function Sun() {
     }
   });
 
-  const onPick = (e: { stopPropagation(): void }) => {
-    e.stopPropagation();
-    setCameraTarget(sky.ra, sky.dec, 28);
+  const selectSun = () => {
     setSelected({
       id: "SUN",
       name: "Sun",
@@ -172,6 +171,12 @@ export function Sun() {
       wikiTitle: "Sun",
       blurb: `Our G2V main-sequence star. Distance ${sky.dist.toFixed(3)} AU.`,
     });
+  };
+
+  const onPick = (e: { stopPropagation(): void }) => {
+    e.stopPropagation();
+    setCameraTarget(sky.ra, sky.dec, 28);
+    selectSun();
   };
 
   const onHoverIn = (e: {
@@ -215,6 +220,39 @@ export function Sun() {
         <planeGeometry args={[SUN_RADIUS * CORONA_SCALE, SUN_RADIUS * CORONA_SCALE]} />
         <primitive object={coronaMat} attach="material" />
       </mesh>
+      <Html
+        position={[0, SUN_RADIUS * 1.7, 0]}
+        center
+        zIndexRange={[8, 0]}
+        style={{ pointerEvents: "auto" }}
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setCameraTarget(sky.ra, sky.dec, 28);
+            selectSun();
+          }}
+          onPointerEnter={() => selectSun()}
+          style={{
+            fontFamily: "var(--font-sans, system-ui)",
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.28em",
+            textTransform: "uppercase",
+            color: "rgba(255, 230, 180, 0.95)",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: "2px 6px",
+            textShadow:
+              "0 0 8px rgba(0,0,0,0.9), 0 0 14px rgba(255, 180, 80, 0.55)",
+            whiteSpace: "nowrap",
+            userSelect: "none",
+          }}
+        >
+          SUN
+        </button>
+      </Html>
     </group>
   );
 }

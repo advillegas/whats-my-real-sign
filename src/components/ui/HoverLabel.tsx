@@ -28,7 +28,7 @@ export function HoverLabel() {
   const hover = useViewer((s) => s.hover);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-30">
+    <div className="pointer-events-none fixed inset-0 z-[35]">
       <AnimatePresence>
         {hover && (
           <motion.div

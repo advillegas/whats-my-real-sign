@@ -187,11 +187,12 @@ interface PlanetProps {
   sunVec: Vector3;
   style: PlanetStyle;
   onPick: (id: PlanetId, ra: number, dec: number, dist: number) => void;
+  onSelect: (id: PlanetId, ra: number, dec: number, dist: number) => void;
   onHoverIn: (id: PlanetId, dist: number, x: number, y: number) => void;
   onHoverOut: () => void;
 }
 
-function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHoverOut }: PlanetProps) {
+function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onSelect, onHoverIn, onHoverOut }: PlanetProps) {
   const groupRef = useRef<Group>(null);
   const sphereRef = useRef<Mesh>(null);
   const tex = useLoader(TextureLoader, style.texture);
@@ -291,10 +292,15 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHo
       <Html
         position={[0, style.size * 1.4, 0]}
         center
-        zIndexRange={[5, 0]}
-        style={{ pointerEvents: "none" }}
+        zIndexRange={[8, 0]}
+        style={{ pointerEvents: "auto" }}
       >
-        <div
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPick(id, ra, dec, dist);
+          }}
+          onPointerEnter={() => onSelect(id, ra, dec, dist)}
           style={{
             fontFamily: "var(--font-sans, system-ui)",
             fontSize: 10.5,
@@ -303,13 +309,16 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHo
             textTransform: "uppercase",
             color: "rgba(255, 220, 170, 0.9)",
             background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: "2px 4px",
             textShadow: "0 0 6px rgba(0,0,0,0.85)",
             whiteSpace: "nowrap",
             userSelect: "none",
           }}
         >
           {id}
-        </div>
+        </button>
       </Html>
     </group>
   );
@@ -339,8 +348,7 @@ export function Planets() {
 
   if (!visible) return null;
 
-  const onPick = (id: PlanetId, ra: number, dec: number, dist: number) => {
-    setCameraTarget(ra, dec, 22);
+  const onSelect = (id: PlanetId, ra: number, dec: number, dist: number) => {
     setSelected({
       id,
       name: id,
@@ -350,6 +358,11 @@ export function Planets() {
       wikiTitle: id,
       blurb: `Distance ${dist.toFixed(3)} AU from Earth.`,
     });
+  };
+
+  const onPick = (id: PlanetId, ra: number, dec: number, dist: number) => {
+    setCameraTarget(ra, dec, 22);
+    onSelect(id, ra, dec, dist);
   };
 
   const onHoverIn = (id: PlanetId, dist: number, x: number, y: number) => {
@@ -383,6 +396,7 @@ export function Planets() {
             sunVec={sunVec}
             style={style}
             onPick={onPick}
+            onSelect={onSelect}
             onHoverIn={onHoverIn}
             onHoverOut={onHoverOut}
           />

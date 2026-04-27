@@ -42,6 +42,15 @@ function ConstellationLabel({
               x: e.clientX,
               y: e.clientY,
             });
+            setSelected({
+              id: `CON_${m.desig}`,
+              name: m.name,
+              ra: m.ra,
+              dec: m.dec,
+              kind: "constellation",
+              blurb: `IAU constellation ${m.desig}.`,
+              wikiTitle: m.name,
+            });
             document.body.style.cursor = "pointer";
           }}
           onPointerMove={(e) => {

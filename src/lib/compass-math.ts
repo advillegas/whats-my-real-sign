@@ -1,203 +1,187 @@
+"use client";
+
 /**
- * Pure math for translating a phone's `DeviceOrientationEvent` into the
- * altitude/azimuth direction the back of the device is currently pointing.
+ * AR-mode camera math.
  *
- * Background: browsers expose three Euler angles (alpha, beta, gamma) that
- * describe the device's orientation relative to a local east-north-up frame.
- * THREE's `DeviceOrientationControls` uses the same recipe; we replicate it
- * here without the React/three-specific bits so the function stays unit-
- * testable.
+ * One job: turn a `DeviceOrientationEvent` plus the observer's
+ * location/clock into the THREE camera quaternion that points the camera
+ * through the back of the device at the matching patch of celestial
+ * sphere. Lift the phone toward the real Sun → the synthetic Sun lands at
+ * screen centre.
  *
- * Output azimuth is in the astronomy convention (0° = north, 90° = east,
- * clockwise), and altitude is in degrees above the horizon.
+ * Pipeline (all inside `buildArCameraQuat`):
  *
- * Magnetic-vs-true-north correction is intentionally deferred — most users
- * won't notice the typical 0–15° offset, and a manual "calibrate to a known
- * object" knob can be layered on top later.
+ *   1. (alpha, beta, gamma, screenAngle, yawOffset, flipHorizontalAlpha)
+ *      → device-to-THREE-world quaternion.
+ *
+ *      Standard `THREE.DeviceOrientationControls` recipe — Z-X'-Y'' Euler
+ *      angles, then a -π/2 rotation around X so the camera looks out the
+ *      *back* of the device, then a -screenAngle rotation around Z so the
+ *      math survives landscape mode. Two extra knobs:
+ *
+ *       • `flipHorizontalAlpha` — most browsers (iOS Safari + nearly all
+ *         Android Chrome builds) report alpha as a CW compass heading,
+ *         not the W3C-spec CCW yaw. With the flag on (the default) we
+ *         negate alpha to put it back into W3C terms. The "Mirror sky"
+ *         button in the AR overlay exposes this for spec-literal devices.
+ *
+ *       • `yawOffsetRad` — manual heading nudge the user dials in by
+ *         dragging the AR overlay. iOS references alpha to whatever
+ *         orientation the page loaded in (not true north), and even on
+ *         Android with absolute events the magnetometer is routinely off
+ *         by 5-15° from local interference / declination. We bake the
+ *         offset directly into alpha (same units, same axis), which means
+ *         spec-normalization and user-calibration commute and there's no
+ *         order-of-operations ambiguity.
+ *
+ *   2. Extract device-back (camera forward) and device-screen-up (camera
+ *      up) vectors in the THREE world frame (+X east, +Y up, -Z north).
+ *
+ *   3. World vector → (alt, az) → (RA, Dec) → scene-frame Vec3.
+ *      The atan2 form is just the inverse of the standard ENU spherical
+ *      formula; `astronomy-engine` handles the alt/az → equatorial step;
+ *      `raDecHoursToVec3` lands us in the same celestial frame the stars
+ *      are rendered in. We have to round-trip through equatorial because
+ *      the scene frame is fixed to the stars (J2000-ish) while the world
+ *      frame is fixed to the observer — the rotation between them spins
+ *      one full turn per sidereal day.
+ *
+ *   4. `Matrix4.lookAt(origin, lookCelestial, upCelestial)` → quaternion.
+ *      lookAt builds a proper rotation from "look here, with this up"
+ *      regardless of frame handedness, so the result is a clean
+ *      quaternion (and so slerpable for smoothing).
+ *
+ * Returns null when any sensor channel is unavailable.
  */
 
-import { Euler, Quaternion, Vector3 } from "three";
+import { Euler, Matrix4, Quaternion, Vector3 } from "three";
+
+import { altAzToRaDec } from "./astronomy";
+import { raDecHoursToVec3 } from "./coordinates";
 
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 
-const Y_AXIS = new Vector3(0, 1, 0);
 const Z_AXIS = new Vector3(0, 0, 1);
-// THREE's correction: a phone held vertical with its screen facing the user
-// has its back along world -Z, but the camera convention also looks down -Z.
-// The −π/2 rotation around X aligns the device "back" with the world frame.
+// THREE's correction: a phone held flat with screen up has its back along
+// world -Z, but THREE camera convention also looks down -Z. The -π/2
+// rotation around X swings the camera so it looks out the *back* of the
+// device instead of out the *top*.
 const Q_PHONE_TO_WORLD = new Quaternion().setFromAxisAngle(
   new Vector3(1, 0, 0),
   -Math.PI / 2,
 );
 
-const tmpEuler = new Euler();
-const tmpQ = new Quaternion();
-const tmpScreenQ = new Quaternion();
-const tmpHeadingQ = new Quaternion();
-const tmpDir = new Vector3();
+// All scratch is module-level — the sensor handler runs at sensor rate
+// (~60 Hz) and allocating per call would thrash the GC.
+const _euler = new Euler();
+const _qDev = new Quaternion();
+const _qScreen = new Quaternion();
+const _vBack = new Vector3();
+const _vUp = new Vector3();
+const _vLookCel = new Vector3();
+const _vUpCel = new Vector3();
+const _origin = new Vector3();
+const _lookMat = new Matrix4();
 
-export interface OrientationInput {
-  /** `event.alpha` in degrees, or null when unavailable. */
+export interface ArCameraInput {
+  /** `event.alpha` in degrees, or null when missing. */
   alpha: number | null;
-  /** `event.beta` in degrees, or null. */
+  /** `event.beta` in degrees, or null when missing. */
   beta: number | null;
-  /** `event.gamma` in degrees, or null. */
+  /** `event.gamma` in degrees, or null when missing. */
   gamma: number | null;
-  /**
-   * Current screen orientation in degrees (0 portrait, 90 landscape-left,
-   * etc). Reads from `screen.orientation.angle` or `window.orientation`.
-   */
+  /** `screen.orientation.angle` in degrees (0 portrait, 90 landscape, …). */
   screenAngle: number;
+  /** Observer latitude in degrees (+N). */
+  latDeg: number;
+  /** Observer longitude in degrees (+E). */
+  lonDeg: number;
+  /** Date used for the sidereal-time computation. */
+  date: Date;
   /**
-   * Manual user-applied yaw correction in radians, rotating the synthetic
-   * sky around the local zenith. Lets the user drag the AR overlay to
-   * align it with reality — alpha is referenced to whatever orientation
-   * the page loaded in on iOS (and even on Android with absolute events
-   * the magnetometer can be off by 5–15° depending on local interference),
-   * so a manual nudge knob is the only fully reliable calibration.
+   * User-applied yaw correction in radians, mutated live by the AR drag
+   * handler in `CameraRig`. Positive = synthetic sky shifts right on
+   * screen (matches the intuitive direction of a rightward drag). Reset
+   * to 0 when AR mode toggles, or when the user flips "Mirror sky" — its
+   * old value is measured in the now-opposite frame and would land
+   * somewhere random.
    */
-  yawOffsetRad?: number;
+  yawOffsetRad: number;
   /**
-   * When true, treat `alpha` as a CW heading (the iOS / most-Android
-   * implementation) rather than a CCW W3C yaw. Negates alpha before
-   * feeding into the Euler. Without this, turning the phone to the right
-   * makes the synthetic sky pan to the left — the symptom of horizontal
-   * inversion users hit on their first AR session.
+   * Negate alpha for devices that report it as a CW compass heading
+   * (iOS Safari + most Android browsers) instead of the W3C-spec CCW yaw.
+   * Defaults to true; the AR overlay exposes a toggle for the rare
+   * spec-literal device.
    */
-  flipHorizontalAlpha?: boolean;
+  flipHorizontalAlpha: boolean;
 }
 
-export interface AltAzDeg {
-  altDeg: number;
-  azDeg: number;
-}
-
-/**
- * The device's full orientation expressed as alt/az pairs for both the
- * back-of-phone direction (where the rear camera points → "look") and the
- * top-of-phone direction (→ "up", what the user calls screen-top).
- *
- * Both are needed because just knowing where the phone aims doesn't tell us
- * how the phone is rolled around that axis. The `up` vector is what lets the
- * rendered view roll correctly when the phone tilts sideways AND lets us
- * align the local zenith (not the celestial pole) with screen-top.
- */
-export interface DeviceOrientationLookUp {
-  look: AltAzDeg;
-  up: AltAzDeg;
-}
-
-/**
- * Build the rotation that takes a vector expressed in the device's local
- * frame (right=+X, top=+Y, out-of-screen=+Z) into a Three.js-style world
- * frame (east=+X, up=+Y, south=+Z, equivalently north=-Z).
- *
- * Recipe matches the long-standing `THREE.DeviceOrientationControls`:
- *   1. Apply the device's intrinsic Z-X'-Y'' Euler angles
- *   2. Multiply by a -π/2 rotation around X so the THREE camera ends up
- *      looking out the *back* of the phone instead of out the *top*.
- *   3. Multiply by a -screenAngle rotation around Z so the math holds when
- *      the user rotates the phone into landscape mode.
- */
-function deviceOrientationQuaternion(
-  input: OrientationInput,
+export function buildArCameraQuat(
+  input: ArCameraInput,
   outQ: Quaternion = new Quaternion(),
 ): Quaternion | null {
-  const { alpha, beta, gamma, screenAngle, yawOffsetRad, flipHorizontalAlpha } =
-    input;
+  const {
+    alpha,
+    beta,
+    gamma,
+    screenAngle,
+    latDeg,
+    lonDeg,
+    date,
+    yawOffsetRad,
+    flipHorizontalAlpha,
+  } = input;
   if (alpha == null || beta == null || gamma == null) return null;
 
-  // Flip alpha sign when the device reports it as a CW compass heading
-  // instead of the W3C-spec CCW yaw. See `OrientationInput` doc-comment.
-  const alphaUsed = flipHorizontalAlpha ? -alpha : alpha;
-  tmpEuler.set(beta * DEG2RAD, alphaUsed * DEG2RAD, -gamma * DEG2RAD, "YXZ");
-  outQ.setFromEuler(tmpEuler);
-  outQ.multiply(Q_PHONE_TO_WORLD);
-  tmpScreenQ.setFromAxisAngle(Z_AXIS, -screenAngle * DEG2RAD);
-  outQ.multiply(tmpScreenQ);
+  // ── 1. device → THREE-world quaternion ──────────────────────────────
+  // Spec normalisation (CW-heading → CCW-yaw) and the user's calibration
+  // nudge are two independent corrections to the same scalar, applied in
+  // the same place so they can't fight each other.
+  const alphaCcw = flipHorizontalAlpha ? -alpha : alpha;
+  const alphaUsed = alphaCcw + yawOffsetRad * RAD2DEG;
+  _euler.set(beta * DEG2RAD, alphaUsed * DEG2RAD, -gamma * DEG2RAD, "YXZ");
+  _qDev.setFromEuler(_euler);
+  _qDev.multiply(Q_PHONE_TO_WORLD);
+  _qScreen.setFromAxisAngle(Z_AXIS, -screenAngle * DEG2RAD);
+  _qDev.multiply(_qScreen);
 
-  // User-supplied calibration nudge. Premultiplying rotates the result
-  // around +Y in the local-up frame, so the back-of-device azimuth shifts
-  // by `yawOffsetRad`. (Positive +Y rotation moves vectors counter-
-  // clockwise / decreasing azimuth, hence the negation.)
-  if (yawOffsetRad && Number.isFinite(yawOffsetRad)) {
-    tmpHeadingQ.setFromAxisAngle(Y_AXIS, -yawOffsetRad);
-    outQ.premultiply(tmpHeadingQ);
-  }
+  // ── 2. device-back & device-screen-up in world frame ────────────────
+  _vBack.set(0, 0, -1).applyQuaternion(_qDev);
+  _vUp.set(0, 1, 0).applyQuaternion(_qDev);
 
-  return outQ;
+  // ── 3. world Vec3 → (alt, az) → (RA, Dec) → scene-frame Vec3 ────────
+  // World frame: +X east, +Y up, -Z north. Same atan2 formula for both.
+  const lookAlt = Math.asin(clamp(_vBack.y, -1, 1)) * RAD2DEG;
+  const lookAz = wrapAz(Math.atan2(_vBack.x, -_vBack.z) * RAD2DEG);
+  const upAlt = Math.asin(clamp(_vUp.y, -1, 1)) * RAD2DEG;
+  const upAz = wrapAz(Math.atan2(_vUp.x, -_vUp.z) * RAD2DEG);
+
+  const lookEq = altAzToRaDec(lookAlt, lookAz, latDeg, lonDeg, date);
+  const upEq = altAzToRaDec(upAlt, upAz, latDeg, lonDeg, date);
+
+  raDecHoursToVec3(lookEq.raHours, lookEq.decDeg, 1, _vLookCel);
+  raDecHoursToVec3(upEq.raHours, upEq.decDeg, 1, _vUpCel);
+
+  // ── 4. scene-frame lookAt → camera quaternion ───────────────────────
+  // Camera at the celestial-sphere centre, looking at the celestial point
+  // matched to the device-back direction, with the local zenith mapped to
+  // screen-top. Using world +Y as up here would tilt the synthetic horizon
+  // by 90° − latitude (world +Y is the celestial pole, not the local
+  // zenith) — that's the "horizon nearly vertical" bug from earlier.
+  _origin.set(0, 0, 0);
+  _lookMat.lookAt(_origin, _vLookCel, _vUpCel);
+  return outQ.setFromRotationMatrix(_lookMat);
 }
 
-/**
- * Convert a unit vector in the local east-north-up world frame used above
- * (+X east, +Y up, -Z north) into astronomy-convention alt/az.
- */
-function vecToAltAz(v: Vector3): AltAzDeg {
-  const altDeg = Math.asin(Math.max(-1, Math.min(1, v.y))) * RAD2DEG;
-  let azRad = Math.atan2(v.x, -v.z);
-  if (azRad < 0) azRad += 2 * Math.PI;
-  return { altDeg, azDeg: azRad * RAD2DEG };
+function clamp(x: number, lo: number, hi: number): number {
+  return x < lo ? lo : x > hi ? hi : x;
 }
 
-/**
- * Translate a `DeviceOrientationEvent` to the altitude/azimuth the back of
- * the device is pointing. Returns null when any input angle is missing.
- */
-export function deviceOrientationToAltAz(input: OrientationInput): AltAzDeg | null {
-  const q = deviceOrientationQuaternion(input, tmpQ);
-  if (!q) return null;
-  tmpDir.set(0, 0, -1).applyQuaternion(q);
-  return vecToAltAz(tmpDir);
-}
-
-/**
- * Translate a `DeviceOrientationEvent` to BOTH the look and screen-up
- * directions in alt/az. Used by AR mode so we can build a full camera
- * orientation (not just yaw/pitch) and keep the synthetic horizon glued to
- * the real horizon as the phone rolls.
- */
-const tmpLookV = new Vector3();
-const tmpUpV = new Vector3();
-export function deviceOrientationToLookUp(
-  input: OrientationInput,
-): DeviceOrientationLookUp | null {
-  const q = deviceOrientationQuaternion(input, tmpQ);
-  if (!q) return null;
-  tmpLookV.set(0, 0, -1).applyQuaternion(q);
-  tmpUpV.set(0, 1, 0).applyQuaternion(q);
-  return {
-    look: vecToAltAz(tmpLookV),
-    up: vecToAltAz(tmpUpV),
-  };
-}
-
-/**
- * One-pole low-pass filter for yaw/pitch readings. Handles yaw wraparound
- * (so a 359° → 1° reading doesn't smear across 358°).
- *
- * `alpha` is the per-sample mix factor: 0 = ignore the new sample, 1 = no
- * smoothing. Around 0.18 at ~60 Hz gives a roughly 10 Hz cutoff which feels
- * responsive but kills the high-frequency gyro jitter.
- */
-export function lowPassYawPitch(
-  prev: { yaw: number; pitch: number } | null,
-  next: { yaw: number; pitch: number },
-  alpha: number,
-): { yaw: number; pitch: number } {
-  if (!prev) return next;
-
-  let dy = next.yaw - prev.yaw;
-  if (dy > Math.PI) dy -= Math.PI * 2;
-  else if (dy < -Math.PI) dy += Math.PI * 2;
-
-  let yaw = prev.yaw + dy * alpha;
-  // Renormalize to (-PI, PI] to avoid unbounded drift.
-  if (yaw > Math.PI) yaw -= Math.PI * 2;
-  else if (yaw < -Math.PI) yaw += Math.PI * 2;
-
-  const pitch = prev.pitch + (next.pitch - prev.pitch) * alpha;
-  return { yaw, pitch };
+function wrapAz(deg: number): number {
+  let v = deg % 360;
+  if (v < 0) v += 360;
+  return v;
 }
 
 /**

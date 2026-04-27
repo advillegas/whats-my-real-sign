@@ -225,7 +225,13 @@ export function CameraRig() {
       lastPos.current = { x: e.clientX, y: e.clientY };
       const fovScale = "fov" in camera ? (camera as { fov: number }).fov / 55 : 1;
       if (compassModeRef.current) {
-        compassState.yawOffsetRad -= dx * DRAG_SENSITIVITY * fovScale;
+        // Drag right (dx > 0) → user expects the synthetic sky to shift
+        // right. The new compass pipeline bakes yawOffset directly into
+        // the W3C alpha (CCW-positive). Increasing it rotates the device's
+        // assumed pose CCW from above, which moves the lookAt target from
+        // (say) celestial-N toward celestial-W and slides stars rightward
+        // on screen.
+        compassState.yawOffsetRad += dx * DRAG_SENSITIVITY * fovScale;
         return;
       }
       ypr.current.yaw -= dx * DRAG_SENSITIVITY * fovScale;

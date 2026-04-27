@@ -5,13 +5,11 @@
  *
  * Two knobs the user can touch:
  *   1. "Reset alignment" — zeroes the live yaw nudge they've been dragging.
- *   2. "Mirror sky"      — flips the alpha-sign convention. We default to
- *                          treating alpha as a CW heading (the iOS / most
- *                          Android implementation); on a device that
- *                          actually follows the literal W3C CCW spec, this
- *                          toggle puts horizontal directions back the
- *                          right way around. Persists in localStorage so
- *                          the device only needs to be calibrated once.
+ *   2. "Mirror sky"      — flips the alpha-sign convention. The synthetic
+ *                          sky should track real motion; if turning the
+ *                          phone moves the on-screen sky the wrong way,
+ *                          tap this. Persisted in localStorage so the
+ *                          device only needs to be calibrated once.
  *
  * Also shows a one-time "drag to align" hint on first AR session.
  */
@@ -21,7 +19,11 @@ import { useViewer } from "@/store/viewer-store";
 import { compassState } from "@/lib/compass-state";
 
 const HINT_KEY = "ar-calibration-hint-seen";
-const FLIP_KEY = "ar-flip-horizontal";
+// Bumped when the default convention flipped — so any stored "1" / "0" from
+// the old default doesn't override the new default for users who never
+// explicitly touched the toggle.
+const FLIP_KEY = "ar-flip-horizontal-v2";
+const FLIP_DEFAULT = false;
 
 export function ARCalibrationOverlay() {
   const compassMode = useViewer((s) => s.compassMode);
@@ -29,15 +31,14 @@ export function ARCalibrationOverlay() {
   const [hasOffset, setHasOffset] = useState(false);
   // Mirror toggle — kept in component state so the button re-renders, plus
   // mirrored to compassState (read by the high-frequency event handler).
-  const [flipped, setFlipped] = useState(true);
+  const [flipped, setFlipped] = useState(FLIP_DEFAULT);
 
   // Restore mirror preference on mount.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const raw = window.localStorage.getItem(FLIP_KEY);
     if (raw === null) {
-      // No saved preference → use the default (true).
-      compassState.flipHorizontalAlpha = true;
+      compassState.flipHorizontalAlpha = FLIP_DEFAULT;
       return;
     }
     const value = raw === "1";

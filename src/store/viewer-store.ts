@@ -79,6 +79,12 @@ interface ViewerState {
   fovNudge: { delta: number; nonce: number };
   /** True once the user has manually navigated (drag, scroll, pinch, click, search). */
   hasInteracted: boolean;
+  /**
+   * Show floating hover tooltips and auto-open the description panel when
+   * hovering labels. When false, the user can drag/zoom and tap to select
+   * without any tooltip popups — useful on mobile.
+   */
+  tooltipsEnabled: boolean;
 
   setDate: (d: Date) => void;
   setCurrentJdDate: (d: Date) => void;
@@ -89,6 +95,7 @@ interface ViewerState {
   setAnimating: (v: boolean) => void;
   nudgeFov: (delta: number) => void;
   markInteracted: () => void;
+  toggleTooltips: () => void;
 }
 
 const today = new Date();
@@ -111,6 +118,7 @@ export const useViewer = create<ViewerState>((set) => ({
   isAnimating: false,
   fovNudge: { delta: 0, nonce: 0 },
   hasInteracted: false,
+  tooltipsEnabled: true,
   setDate: (d) => set({ requestedDate: d, hasInteracted: true }),
   setCurrentJdDate: (d) => set({ date: d }),
   setCameraTarget: (raHours, decDeg, fovDeg) =>
@@ -132,6 +140,11 @@ export const useViewer = create<ViewerState>((set) => ({
   markInteracted: () => {
     if (!useViewer.getState().hasInteracted) set({ hasInteracted: true });
   },
+  toggleTooltips: () =>
+    set((s) => {
+      const next = !s.tooltipsEnabled;
+      return next ? { tooltipsEnabled: next } : { tooltipsEnabled: next, hover: null };
+    }),
 }));
 
 /**

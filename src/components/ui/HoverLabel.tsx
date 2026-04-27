@@ -26,11 +26,12 @@ const KIND_DOT: Record<string, string> = {
 
 export function HoverLabel() {
   const hover = useViewer((s) => s.hover);
+  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[35]">
       <AnimatePresence>
-        {hover && (
+        {hover && tooltipsEnabled && (
           <motion.div
             key={hover.name + hover.kind}
             initial={{ opacity: 0, y: -4 }}

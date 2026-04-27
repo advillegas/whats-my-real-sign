@@ -118,6 +118,7 @@ export function Sun() {
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const setHover = useViewer((s) => s.setHover);
   const markInteracted = useViewer((s) => s.markInteracted);
+  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
   const sunTex = useLoader(TextureLoader, "/textures/sun.jpg");
   const surfaceRef = useRef<Mesh>(null);
   const coronaRef = useRef<Mesh>(null);
@@ -189,6 +190,7 @@ export function Sun() {
   }) => {
     e.stopPropagation();
     if (e.pointerType && e.pointerType !== "mouse" && e.pointerType !== "pen") return;
+    if (!tooltipsEnabled) return;
     setHover({
       name: "Sun",
       subtitle: `${sky.dist.toFixed(3)} AU away`,
@@ -235,7 +237,9 @@ export function Sun() {
             selectSun();
             markInteracted();
           }}
-          onPointerEnter={() => selectSun()}
+          onPointerEnter={() => {
+            if (tooltipsEnabled) selectSun();
+          }}
           style={{
             fontFamily: "var(--font-sans, system-ui)",
             fontSize: 11,

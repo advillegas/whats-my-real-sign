@@ -63,6 +63,7 @@ export function Hover({ stars, dso }: Props) {
       // pen). On touch the pointer is "down" while moving which would just
       // flicker labels during a drag.
       if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
+      if (!useViewer.getState().tooltipsEnabled) return;
       const now = performance.now();
       if (now - lastFire.current < HOVER_THROTTLE_MS) return;
       lastFire.current = now;

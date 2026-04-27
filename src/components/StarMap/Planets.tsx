@@ -331,6 +331,7 @@ export function Planets() {
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const setHover = useViewer((s) => s.setHover);
   const markInteracted = useViewer((s) => s.markInteracted);
+  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
 
   const { positions, sunVec } = useMemo(() => {
     const all = allBodySky(date);
@@ -361,6 +362,11 @@ export function Planets() {
     });
   };
 
+  const onHoverSelect = (id: PlanetId, ra: number, dec: number, dist: number) => {
+    if (!tooltipsEnabled) return;
+    onSelect(id, ra, dec, dist);
+  };
+
   const onPick = (id: PlanetId, ra: number, dec: number, dist: number) => {
     setCameraTarget(ra, dec, 22);
     onSelect(id, ra, dec, dist);
@@ -368,6 +374,7 @@ export function Planets() {
   };
 
   const onHoverIn = (id: PlanetId, dist: number, x: number, y: number) => {
+    if (!tooltipsEnabled) return;
     setHover({
       name: id,
       subtitle: `${dist.toFixed(3)} AU away`,
@@ -398,7 +405,7 @@ export function Planets() {
             sunVec={sunVec}
             style={style}
             onPick={onPick}
-            onSelect={onSelect}
+            onSelect={onHoverSelect}
             onHoverIn={onHoverIn}
             onHoverOut={onHoverOut}
           />

@@ -18,6 +18,7 @@ function ConstellationLabel({
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   const setHover = useViewer((s) => s.setHover);
   const markInteracted = useViewer((s) => s.markInteracted);
+  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
   const [hot, setHot] = useState(false);
   const fontSize = m.rank === "1" ? 14 : m.rank === "2" ? 12 : 10.5;
   const baseOpacity = m.rank === "1" ? 0.95 : m.rank === "2" ? 0.78 : 0.55;
@@ -35,6 +36,7 @@ function ConstellationLabel({
         <button
           onPointerEnter={(e) => {
             setHot(true);
+            if (!tooltipsEnabled) return;
             setHover({
               name: m.name,
               subtitle: `IAU ${m.desig}`,
@@ -55,6 +57,7 @@ function ConstellationLabel({
             document.body.style.cursor = "pointer";
           }}
           onPointerMove={(e) => {
+            if (!tooltipsEnabled) return;
             setHover({
               name: m.name,
               subtitle: `IAU ${m.desig}`,

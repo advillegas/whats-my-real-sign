@@ -24,7 +24,8 @@ const LayersIcon = () => (
 export function LayerToggles() {
   const layers = useViewer((s) => s.layers);
   const toggle = useViewer((s) => s.toggleLayer);
-  // Open by default on desktop (sm+), closed on phones.
+  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
+  const toggleTooltips = useViewer((s) => s.toggleTooltips);
   const [open, setOpen] = useState(false);
 
   return (
@@ -40,7 +41,7 @@ export function LayerToggles() {
       </button>
 
       <div
-        className={`${open ? "flex" : "hidden"} sm:flex absolute sm:static bottom-12 right-0 sm:bottom-auto glass rounded-2xl p-3 flex-col gap-1.5 text-xs min-w-[180px] shadow-xl`}
+        className={`${open ? "flex" : "hidden"} sm:flex absolute sm:static bottom-12 right-0 sm:bottom-auto glass rounded-2xl p-3 flex-col gap-1.5 text-xs min-w-[200px] shadow-xl`}
       >
         <div className="text-[10px] uppercase tracking-[0.24em] text-blue-200/70 mb-1 px-1">
           Layers
@@ -59,6 +60,24 @@ export function LayerToggles() {
             <span className="text-white/85">{item.label}</span>
           </label>
         ))}
+
+        <div className="border-t border-white/10 mt-2 pt-2">
+          <div className="text-[10px] uppercase tracking-[0.24em] text-blue-200/70 mb-1 px-1">
+            Interaction
+          </div>
+          <label
+            className="flex items-center gap-2 px-1.5 py-2 sm:py-1 rounded hover:bg-white/5 active:bg-white/10 cursor-pointer select-none"
+            title="Show floating labels and auto-open the description panel when hovering"
+          >
+            <input
+              type="checkbox"
+              checked={tooltipsEnabled}
+              onChange={() => toggleTooltips()}
+              className="accent-blue-300 w-4 h-4"
+            />
+            <span className="text-white/85">Hover tooltips</span>
+          </label>
+        </div>
       </div>
     </div>
   );

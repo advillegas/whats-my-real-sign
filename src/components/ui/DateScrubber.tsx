@@ -7,11 +7,31 @@ import { easeInOutCubic, lerp } from "@/lib/tween";
 
 const TWEEN_MS = 1500;
 
-function fmtIso(d: Date): string {
-  const yyyy = d.getFullYear();
+// Astronomical year numbering: AD year Y = JS year Y; BC year Y = JS year 1 - Y.
+// e.g. 1 BC = JS year 0 (proleptic Gregorian), 44 BC = JS year -43.
+type Era = "AD" | "BC";
+
+function jsYearToDisplay(jsYear: number): { era: Era; year: number } {
+  return jsYear >= 1 ? { era: "AD", year: jsYear } : { era: "BC", year: 1 - jsYear };
+}
+
+function displayToJsYear(era: Era, displayYear: number): number {
+  return era === "AD" ? displayYear : 1 - displayYear;
+}
+
+function fmtIsoDisplay(d: Date): string {
+  const dispY = jsYearToDisplay(d.getFullYear()).year;
+  const yyyy = String(Math.max(1, dispY)).padStart(4, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function buildDate(jsYear: number, monthIdx: number, day: number): Date {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setFullYear(jsYear, monthIdx, day);
+  return d;
 }
 
 export function DateScrubber() {
@@ -57,10 +77,19 @@ export function DateScrubber() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedDate]);
 
+  const era = jsYearToDisplay(requestedDate.getFullYear()).era;
+
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     if (!v) return;
-    const next = new Date(`${v}T12:00:00`);
+    const m = /^(-?\d{1,6})-(\d{2})-(\d{2})$/.exec(v);
+    if (!m) return;
+    const dispY = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const day = parseInt(m[3], 10);
+    if (!Number.isFinite(dispY) || dispY < 1) return;
+    const jsYear = displayToJsYear(era, dispY);
+    const next = buildDate(jsYear, mo - 1, day);
     if (Number.isNaN(next.getTime())) return;
     setDate(next);
   };
@@ -68,6 +97,15 @@ export function DateScrubber() {
   const onYearShift = (delta: number) => {
     const next = new Date(requestedDate);
     next.setFullYear(next.getFullYear() + delta);
+    setDate(next);
+  };
+
+  const onEraToggle = () => {
+    const newEra: Era = era === "AD" ? "BC" : "AD";
+    const dispY = jsYearToDisplay(requestedDate.getFullYear()).year;
+    const newJsYear = displayToJsYear(newEra, dispY);
+    const next = new Date(requestedDate);
+    next.setFullYear(newJsYear, requestedDate.getMonth(), requestedDate.getDate());
     setDate(next);
   };
 
@@ -86,10 +124,20 @@ export function DateScrubber() {
       </button>
       <input
         type="date"
-        value={fmtIso(requestedDate)}
+        value={fmtIsoDisplay(requestedDate)}
         onChange={onChange}
+        min="0001-01-01"
         className="bg-transparent text-white/90 outline-none [color-scheme:dark] min-w-0 flex-1 sm:flex-none text-center"
       />
+      <button
+        onClick={onEraToggle}
+        title={era === "AD" ? "Switch to BC" : "Switch to AD"}
+        className={`px-2 py-1.5 sm:py-1 rounded hover:bg-white/10 active:bg-white/20 transition min-h-[36px] font-mono tracking-wider ${
+          era === "BC" ? "text-amber-200" : "text-white/70 hover:text-white"
+        }`}
+      >
+        {era}
+      </button>
       <button
         onClick={() => onYearShift(1)}
         title="One year later"

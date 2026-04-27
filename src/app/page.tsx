@@ -41,12 +41,12 @@ export default function Home() {
       <Scene />
       <AimAtTodaysSun />
 
-      <header className="absolute top-0 inset-x-0 p-5 flex items-start justify-between gap-4 pointer-events-none z-10">
+      <header className="absolute top-0 inset-x-0 px-3 pt-3 sm:px-5 sm:pt-5 safe-top safe-left safe-right flex items-start justify-between gap-3 pointer-events-none z-10">
         <div className="pointer-events-auto">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-white/55">
+          <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.28em] sm:tracking-[0.32em] text-white/55">
             What&apos;s My Real Sign
           </div>
-          <div className="text-white/85 text-sm mt-0.5">
+          <div className="text-white/85 text-[11px] sm:text-sm mt-0.5 hidden sm:block">
             A scientifically accurate 3D sky.
           </div>
         </div>
@@ -55,23 +55,24 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="absolute top-24 left-5 max-w-sm pointer-events-auto z-10">
+      <div className="absolute top-14 sm:top-24 left-2 right-2 sm:left-5 sm:right-auto sm:max-w-sm pointer-events-auto z-10">
         <SignReveal />
       </div>
 
-      <div className="absolute top-24 right-5 pointer-events-auto z-10 flex flex-col gap-3 items-end">
+      <div className="absolute top-14 sm:top-24 right-2 sm:right-5 pointer-events-auto z-10 flex flex-col gap-3 items-end max-w-[80vw] sm:max-w-sm hidden md:flex">
         <ApodCard />
-        <ObjectInfoPanel />
       </div>
 
-      <div className="absolute bottom-5 left-5 right-5 flex items-end justify-between gap-4 pointer-events-none z-10">
+      <ObjectInfoPanel />
+
+      <div className="absolute bottom-2 sm:bottom-5 left-2 right-2 sm:left-5 sm:right-5 flex flex-col-reverse sm:flex-row items-stretch sm:items-end justify-between gap-2 sm:gap-4 pointer-events-none z-10 safe-bottom safe-left safe-right">
         <div className="pointer-events-auto">
           <DateScrubber />
         </div>
         <div className="pointer-events-auto flex flex-col items-center gap-3">
           <HelpHint />
         </div>
-        <div className="pointer-events-auto flex items-end gap-2">
+        <div className="pointer-events-auto flex flex-row sm:flex-row items-end justify-end gap-2">
           <ZoomControls />
           <LayerToggles />
         </div>
@@ -79,7 +80,7 @@ export default function Home() {
 
       <HoverLabel />
 
-      <div className="absolute bottom-1 inset-x-0 text-center text-[10px] text-white/30 pointer-events-none z-0">
+      <div className="absolute bottom-0 inset-x-0 text-center text-[9px] sm:text-[10px] text-white/30 pointer-events-none z-0 hidden md:block px-2 pb-1 safe-bottom">
         Milky Way panorama:{" "}
         <a
           href="https://www.eso.org/public/images/eso0932a/"

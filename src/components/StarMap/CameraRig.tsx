@@ -53,6 +53,8 @@ export function CameraRig() {
   } | null>(null);
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ initialDist: number; initialFov: number } | null>(null);
   const targetState = useViewer((s) => s.cameraTarget);
   const fovNudge = useViewer((s) => s.fovNudge);
   const setAnimating = useViewer((s) => s.setAnimating);
@@ -68,33 +70,88 @@ export function CameraRig() {
     camera.lookAt(lookTarget.current.clone().multiplyScalar(CELESTIAL_RADIUS));
   }, [camera]);
 
-  // Pointer drag handlers.
+  // Pointer drag handlers + multi-touch pinch.
   useEffect(() => {
     const dom = gl.domElement;
-    const onDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
-      dragging.current = true;
-      lastPos.current = { x: e.clientX, y: e.clientY };
-      dom.setPointerCapture(e.pointerId);
-      tween.current = null;
+
+    const pinchDist = () => {
+      const pts = Array.from(pointers.current.values());
+      if (pts.length < 2) return 0;
+      const a = pts[0];
+      const b = pts[1];
+      return Math.hypot(b.x - a.x, b.y - a.y);
     };
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      tween.current = null;
+      try {
+        dom.setPointerCapture(e.pointerId);
+      } catch {
+        /* noop */
+      }
+      if (pointers.current.size === 1) {
+        dragging.current = true;
+        lastPos.current = { x: e.clientX, y: e.clientY };
+        pinch.current = null;
+      } else if (pointers.current.size === 2 && "fov" in camera) {
+        // Switch into pinch mode; suspend drag.
+        dragging.current = false;
+        pinch.current = {
+          initialDist: pinchDist(),
+          initialFov: (camera as { fov: number }).fov,
+        };
+      }
+    };
+
     const onMove = (e: PointerEvent) => {
+      if (!pointers.current.has(e.pointerId)) return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointers.current.size === 2 && pinch.current && "fov" in camera) {
+        const dist = pinchDist();
+        if (dist > 0 && pinch.current.initialDist > 0) {
+          const cam = camera as { fov: number; updateProjectionMatrix: () => void };
+          const ratio = pinch.current.initialDist / dist;
+          cam.fov = clamp(pinch.current.initialFov * ratio, MIN_FOV, MAX_FOV);
+          cam.updateProjectionMatrix();
+        }
+        return;
+      }
+
       if (!dragging.current) return;
       const dx = e.clientX - lastPos.current.x;
       const dy = e.clientY - lastPos.current.y;
       lastPos.current = { x: e.clientX, y: e.clientY };
-      yp.current.yaw -= dx * DRAG_SENSITIVITY;
-      yp.current.pitch += dy * DRAG_SENSITIVITY;
+      // Sensitivity scales with FOV so a finger sweep at 12° feels the same
+      // as at 90°.
+      const fovScale = "fov" in camera ? (camera as { fov: number }).fov / 55 : 1;
+      yp.current.yaw -= dx * DRAG_SENSITIVITY * fovScale;
+      yp.current.pitch += dy * DRAG_SENSITIVITY * fovScale;
       yp.current.pitch = clamp(yp.current.pitch, -PITCH_LIMIT, PITCH_LIMIT);
     };
+
     const onUp = (e: PointerEvent) => {
-      dragging.current = false;
+      pointers.current.delete(e.pointerId);
       try {
         dom.releasePointerCapture(e.pointerId);
       } catch {
         /* noop */
       }
+      if (pointers.current.size < 2) {
+        pinch.current = null;
+      }
+      if (pointers.current.size === 0) {
+        dragging.current = false;
+      } else if (pointers.current.size === 1) {
+        // Resume drag from the surviving touch.
+        dragging.current = true;
+        const [pt] = pointers.current.values();
+        lastPos.current = { x: pt.x, y: pt.y };
+      }
     };
+
     const onWheel = (e: WheelEvent) => {
       if (!("fov" in camera)) return;
       const cam = camera as { fov: number; updateProjectionMatrix: () => void };
@@ -103,17 +160,27 @@ export function CameraRig() {
       cam.updateProjectionMatrix();
       e.preventDefault();
     };
+
+    const onTouchStart = (e: TouchEvent) => {
+      // Block the browser pinch-zoom and pull-to-refresh; we manage zoom.
+      if (e.touches.length > 1) e.preventDefault();
+    };
+
     dom.addEventListener("pointerdown", onDown);
     dom.addEventListener("pointermove", onMove);
     dom.addEventListener("pointerup", onUp);
     dom.addEventListener("pointercancel", onUp);
     dom.addEventListener("wheel", onWheel, { passive: false });
+    dom.addEventListener("touchstart", onTouchStart, { passive: false });
+    dom.addEventListener("touchmove", onTouchStart, { passive: false });
     return () => {
       dom.removeEventListener("pointerdown", onDown);
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup", onUp);
       dom.removeEventListener("pointercancel", onUp);
       dom.removeEventListener("wheel", onWheel);
+      dom.removeEventListener("touchstart", onTouchStart);
+      dom.removeEventListener("touchmove", onTouchStart);
     };
   }, [camera, gl]);
 

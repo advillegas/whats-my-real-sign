@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { ACESFilmicToneMapping, SRGBColorSpace } from "three";
 import { EffectComposer, Bloom, Vignette, SMAA } from "@react-three/postprocessing";
@@ -17,9 +17,17 @@ import { Picker } from "./Picker";
 import { Hover } from "./Hover";
 import { loadStars, loadDeepSky, type StarRecord, type DsoRecord } from "@/lib/catalogs";
 
+function detectMobile(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia("(pointer: coarse)").matches) return true;
+  if (window.innerWidth < 768) return true;
+  return false;
+}
+
 export function Scene() {
   const [stars, setStars] = useState<StarRecord[] | null>(null);
   const [dso, setDso] = useState<DsoRecord[] | null>(null);
+  const isMobile = useMemo(() => detectMobile(), []);
 
   useEffect(() => {
     let alive = true;
@@ -44,12 +52,12 @@ export function Scene() {
         outputColorSpace: SRGBColorSpace,
       }}
       camera={{ fov: 55, near: 0.1, far: 5000, position: [0, 0, 0] }}
-      dpr={[1, 2]}
+      dpr={isMobile ? [1, 1.5] : [1, 2]}
       style={{ position: "fixed", inset: 0, background: "black", touchAction: "none" }}
     >
       <CameraRig />
       <Suspense fallback={null}>
-        <MilkyWay />
+        <MilkyWay quality={isMobile ? "low" : "high"} />
       </Suspense>
       {stars && <Stars stars={stars} />}
       <ConstellationBoundaries />
@@ -66,14 +74,14 @@ export function Scene() {
       {stars && dso && <Hover stars={stars} dso={dso} />}
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
-          intensity={0.5}
+          intensity={isMobile ? 0.4 : 0.5}
           luminanceThreshold={1.1}
           luminanceSmoothing={0.2}
           mipmapBlur
-          radius={0.35}
+          radius={isMobile ? 0.3 : 0.35}
         />
         <Vignette eskil={false} offset={0.2} darkness={0.55} />
-        <SMAA />
+        <SMAA />{/* SMAA is cheap enough; mobile tuning happens via DPR + bloom radius */}
       </EffectComposer>
     </Canvas>
   );

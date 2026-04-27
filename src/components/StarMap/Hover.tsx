@@ -59,6 +59,10 @@ export function Hover({ stars, dso }: Props) {
     const dom = gl.domElement;
 
     const onMove = (e: PointerEvent) => {
+      // Hover labels only make sense for an actual hovering pointer (mouse /
+      // pen). On touch the pointer is "down" while moving which would just
+      // flicker labels during a drag.
+      if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
       const now = performance.now();
       if (now - lastFire.current < HOVER_THROTTLE_MS) return;
       lastFire.current = now;

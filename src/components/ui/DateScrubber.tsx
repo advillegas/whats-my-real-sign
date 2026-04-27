@@ -76,11 +76,11 @@ export function DateScrubber() {
   };
 
   return (
-    <div className="glass rounded-full px-4 py-2 flex items-center gap-2 text-sm">
+    <div className="glass rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm w-full sm:w-auto justify-center">
       <button
         onClick={() => onYearShift(-1)}
         title="One year earlier"
-        className="text-white/70 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition"
+        className="text-white/70 hover:text-white px-2 py-1.5 sm:py-1 rounded hover:bg-white/10 active:bg-white/20 transition min-h-[36px]"
       >
         −1y
       </button>
@@ -88,19 +88,19 @@ export function DateScrubber() {
         type="date"
         value={fmtIso(requestedDate)}
         onChange={onChange}
-        className="bg-transparent text-white/90 outline-none [color-scheme:dark]"
+        className="bg-transparent text-white/90 outline-none [color-scheme:dark] min-w-0 flex-1 sm:flex-none text-center"
       />
       <button
         onClick={() => onYearShift(1)}
         title="One year later"
-        className="text-white/70 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition"
+        className="text-white/70 hover:text-white px-2 py-1.5 sm:py-1 rounded hover:bg-white/10 active:bg-white/20 transition min-h-[36px]"
       >
         +1y
       </button>
-      <span className="w-px h-5 bg-white/15 mx-1" />
+      <span className="w-px h-5 bg-white/15 mx-0.5 sm:mx-1" />
       <button
         onClick={today}
-        className="text-blue-200 hover:text-blue-100 px-2 py-1 rounded hover:bg-white/10 transition"
+        className="text-blue-200 hover:text-blue-100 px-2 py-1.5 sm:py-1 rounded hover:bg-white/10 active:bg-white/20 transition min-h-[36px]"
       >
         Today
       </button>

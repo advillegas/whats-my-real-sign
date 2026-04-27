@@ -174,8 +174,14 @@ export function Sun() {
     });
   };
 
-  const onHoverIn = (e: { clientX: number; clientY: number; stopPropagation(): void }) => {
+  const onHoverIn = (e: {
+    clientX: number;
+    clientY: number;
+    pointerType?: string;
+    stopPropagation(): void;
+  }) => {
     e.stopPropagation();
+    if (e.pointerType && e.pointerType !== "mouse" && e.pointerType !== "pen") return;
     setHover({
       name: "Sun",
       subtitle: `${sky.dist.toFixed(3)} AU away`,

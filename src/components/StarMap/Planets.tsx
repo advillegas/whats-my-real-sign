@@ -266,14 +266,15 @@ function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick, onHoverIn, onHo
       }}
       onPointerOver={(e) => {
         e.stopPropagation();
+        if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
         onHoverIn(id, dist, e.clientX, e.clientY);
       }}
       onPointerMove={(e) => {
         e.stopPropagation();
+        if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
         onHoverIn(id, dist, e.clientX, e.clientY);
       }}
-      onPointerOut={(e) => {
-        e.stopPropagation();
+      onPointerOut={() => {
         onHoverOut();
       }}
     >

@@ -64,7 +64,11 @@ void main() {
 }
 `;
 
-export function MilkyWay() {
+interface MilkyWayProps {
+  quality?: "low" | "high";
+}
+
+export function MilkyWay({ quality = "high" }: MilkyWayProps) {
   const visible = useViewer((s) => s.layers.milkyway);
   const tex = useLoader(TextureLoader, "/textures/eso_milkyway.jpg");
 
@@ -74,8 +78,10 @@ export function MilkyWay() {
     tex.magFilter = LinearFilter;
     tex.wrapS = ClampToEdgeWrapping;
     tex.wrapT = ClampToEdgeWrapping;
-    tex.anisotropy = 8;
-    const geo = new SphereGeometry(CELESTIAL_RADIUS * 0.99, 96, 48);
+    tex.anisotropy = quality === "low" ? 4 : 8;
+    const segW = quality === "low" ? 64 : 96;
+    const segH = quality === "low" ? 32 : 48;
+    const geo = new SphereGeometry(CELESTIAL_RADIUS * 0.99, segW, segH);
     const mat = new ShaderMaterial({
       vertexShader: VS,
       fragmentShader: FS,
@@ -91,7 +97,7 @@ export function MilkyWay() {
       },
     });
     return { geometry: geo, material: mat };
-  }, [tex]);
+  }, [tex, quality]);
 
   return (
     <mesh

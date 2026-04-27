@@ -63,29 +63,29 @@ export function ZoomControls() {
   }, [nudgeFov]);
 
   return (
-    <div className="glass flex flex-col items-stretch overflow-hidden rounded-lg text-white/80 shadow-lg">
+    <div className="glass flex flex-row sm:flex-col items-stretch overflow-hidden rounded-lg text-white/80 shadow-lg">
       <button
         onClick={() => nudgeFov(STEP_IN)}
         title="Zoom in (+)"
-        className="grid place-items-center px-2.5 py-2 transition-colors hover:bg-white/10 hover:text-white"
+        className="grid place-items-center w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-2 transition-colors hover:bg-white/10 active:bg-white/20 hover:text-white"
         aria-label="Zoom in"
       >
         <PlusIcon />
       </button>
-      <div className="h-px w-full bg-white/10" />
+      <div className="w-px sm:w-full sm:h-px h-full bg-white/10" />
       <button
         onClick={() => nudgeFov(NaN)}
         title="Reset zoom (0)"
-        className="grid place-items-center px-2.5 py-2 transition-colors hover:bg-white/10 hover:text-white"
+        className="grid place-items-center w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-2 transition-colors hover:bg-white/10 active:bg-white/20 hover:text-white"
         aria-label="Reset zoom"
       >
         <ResetIcon />
       </button>
-      <div className="h-px w-full bg-white/10" />
+      <div className="w-px sm:w-full sm:h-px h-full bg-white/10" />
       <button
         onClick={() => nudgeFov(STEP_OUT)}
         title="Zoom out (−)"
-        className="grid place-items-center px-2.5 py-2 transition-colors hover:bg-white/10 hover:text-white"
+        className="grid place-items-center w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-2 transition-colors hover:bg-white/10 active:bg-white/20 hover:text-white"
         aria-label="Zoom out"
       >
         <MinusIcon />

@@ -39,28 +39,28 @@ export function ObjectInfoPanel() {
       {selected && (
         <motion.aside
           key={selected.id}
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 24 }}
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 40 }}
           transition={{ duration: 0.25 }}
-          className="glass rounded-2xl p-4 max-w-sm w-[22rem] flex flex-col gap-3"
+          className="glass fixed inset-x-2 bottom-20 sm:inset-x-auto sm:bottom-auto sm:top-24 sm:right-5 rounded-2xl p-4 sm:max-w-sm sm:w-[22rem] flex flex-col gap-3 z-30 max-h-[55vh] sm:max-h-[70vh] overflow-y-auto scrollbar-none safe-left safe-right"
         >
           <div className="flex items-start justify-between gap-2">
-            <div>
+            <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.24em] text-blue-200/70">
                 {selected.kind}
               </div>
-              <div className="text-xl font-semibold mt-0.5 text-white leading-tight">
+              <div className="text-lg sm:text-xl font-semibold mt-0.5 text-white leading-tight truncate">
                 {selected.name}
               </div>
-              <div className="text-[11px] text-white/55 mt-1 font-mono">
+              <div className="text-[10px] sm:text-[11px] text-white/55 mt-1 font-mono">
                 RA {selected.ra.toFixed(3)}h • Dec {selected.dec.toFixed(2)}°
                 {typeof selected.mag === "number" && ` • mag ${selected.mag.toFixed(2)}`}
               </div>
             </div>
             <button
               onClick={() => setSelected(null)}
-              className="text-white/50 hover:text-white text-lg leading-none w-7 h-7 grid place-items-center rounded hover:bg-white/10"
+              className="text-white/50 hover:text-white text-2xl leading-none w-9 h-9 grid place-items-center rounded hover:bg-white/10 active:bg-white/20 shrink-0"
               aria-label="Close panel"
             >
               ×
@@ -74,10 +74,10 @@ export function ObjectInfoPanel() {
             <img
               src={wiki.thumbnail.source}
               alt=""
-              className="rounded-lg max-h-40 object-cover w-full"
+              className="rounded-lg max-h-32 sm:max-h-40 object-cover w-full"
             />
           )}
-          <div className="text-[13px] text-white/85 leading-relaxed min-h-[1.5rem]">
+          <div className="text-[12px] sm:text-[13px] text-white/85 leading-relaxed min-h-[1.5rem]">
             {loading
               ? "Looking up Wikipedia summary..."
               : wiki?.extract ?? (selected.wikiTitle ? "No summary available." : "")}

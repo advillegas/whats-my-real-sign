@@ -95,15 +95,16 @@ export function SearchPalette() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="glass rounded-full px-4 py-2 text-sm text-white/80 hover:text-white flex items-center gap-3"
-        aria-label="Search"
+        className="glass rounded-full sm:px-4 sm:py-2 sm:gap-3 px-0 py-0 w-10 h-10 sm:w-auto sm:h-auto text-sm text-white/80 hover:text-white active:bg-white/10 flex items-center justify-center sm:justify-start"
+        aria-label="Search the sky"
+        title="Search the sky"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:w-[14px] sm:h-[14px]">
           <circle cx="11" cy="11" r="7" />
           <path d="M21 21l-4.3-4.3" />
         </svg>
-        Search the sky
-        <kbd className="ml-1 text-[10px] text-white/50 border border-white/15 rounded px-1.5 py-0.5">
+        <span className="hidden sm:inline">Search the sky</span>
+        <kbd className="hidden sm:inline-block ml-1 text-[10px] text-white/50 border border-white/15 rounded px-1.5 py-0.5">
           ⌘K
         </kbd>
       </button>
@@ -113,14 +114,14 @@ export function SearchPalette() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[16vh]"
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] sm:pt-[16vh] px-2 sm:px-0 safe-top safe-left safe-right"
             onClick={() => setOpen(false)}
           >
             <motion.div
               initial={{ y: -16, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -8, opacity: 0 }}
-              className="glass rounded-2xl w-[34rem] max-w-[92vw] overflow-hidden"
+              className="glass rounded-2xl w-full sm:w-[34rem] sm:max-w-[92vw] overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               <input
@@ -128,8 +129,11 @@ export function SearchPalette() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onKey}
-                placeholder="Search stars, planets, Messier, constellations..."
-                className="w-full bg-transparent text-white px-5 py-4 outline-none placeholder:text-white/40"
+                placeholder="Search stars, planets, Messier..."
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full bg-transparent text-white px-4 sm:px-5 py-3.5 sm:py-4 outline-none placeholder:text-white/40 text-base"
               />
               {results.length > 0 && (
                 <ul className="border-t border-white/10 max-h-[50vh] overflow-auto scrollbar-none">
@@ -138,17 +142,17 @@ export function SearchPalette() {
                       <button
                         onMouseEnter={() => setHover(i)}
                         onClick={() => onPick(r)}
-                        className={`w-full text-left px-5 py-2.5 flex items-center justify-between ${
-                          i === hover ? "bg-white/10" : "hover:bg-white/5"
+                        className={`w-full text-left px-4 sm:px-5 py-3 sm:py-2.5 flex items-center justify-between gap-3 ${
+                          i === hover ? "bg-white/10" : "hover:bg-white/5 active:bg-white/10"
                         }`}
                       >
-                        <div>
-                          <div className="text-white text-sm">{r.name}</div>
-                          <div className="text-[11px] text-white/55">
+                        <div className="min-w-0">
+                          <div className="text-white text-sm truncate">{r.name}</div>
+                          <div className="text-[11px] text-white/55 truncate">
                             {r.subtitle}
                           </div>
                         </div>
-                        <span className="text-[10px] uppercase tracking-widest text-blue-200/60">
+                        <span className="text-[10px] uppercase tracking-widest text-blue-200/60 shrink-0">
                           {r.kind}
                         </span>
                       </button>

@@ -44,15 +44,15 @@ export function SignReveal() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
         transition={{ duration: 0.6 }}
-        className="glass rounded-2xl px-5 py-4 max-w-md"
+        className="glass rounded-2xl px-3.5 py-3 sm:px-5 sm:py-4 max-w-md"
       >
-        <div className="text-[10px] uppercase tracking-[0.28em] text-blue-200/70">
+        <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.24em] sm:tracking-[0.28em] text-blue-200/70">
           Constellation behind the Sun
         </div>
-        <div className="mt-1 text-3xl font-semibold tracking-tight text-white">
+        <div className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-white">
           {realName}
         </div>
-        <div className="mt-2 text-xs text-white/70 leading-relaxed">
+        <div className="mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-white/70 leading-relaxed">
           {tropical && (
             <>
               Western astrology calls this date {""}

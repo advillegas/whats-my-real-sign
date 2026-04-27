@@ -90,6 +90,11 @@ export function CompassDriver() {
         // so the synthetic sky is rotated by an arbitrary offset and a
         // perfectly-aimed phone can have its target completely off-screen.
         yawOffsetRad: compassState.yawOffsetRad,
+        // Most browsers report alpha as a CW heading, not the CCW yaw
+        // the W3C spec describes. The flag is on by default; the AR
+        // calibration overlay exposes a "Mirror sky" toggle for the
+        // minority of devices that get it the other way around.
+        flipHorizontalAlpha: compassState.flipHorizontalAlpha,
       });
       if (!lookUp) return;
 

@@ -35,6 +35,16 @@ export const compassState: {
    * AR mode toggles.
    */
   yawOffsetRad: number;
+  /**
+   * When true, treat `event.alpha` as a heading (clockwise from north)
+   * rather than a W3C-spec CCW yaw. iOS Safari and many Android browsers
+   * report alpha in the heading sense — the W3C spec disagreed with most
+   * implementations for years and the wording has flipped in successive
+   * drafts. Empirically defaulting on matches the orientation users
+   * actually feel; a UI toggle lets devices that follow the literal spec
+   * flip back.
+   */
+  flipHorizontalAlpha: boolean;
 } = {
   qx: 0,
   qy: 0,
@@ -43,4 +53,5 @@ export const compassState: {
   hasReading: false,
   lastUpdateMs: 0,
   yawOffsetRad: 0,
+  flipHorizontalAlpha: true,
 };

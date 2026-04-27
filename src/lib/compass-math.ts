@@ -58,6 +58,14 @@ export interface OrientationInput {
    * so a manual nudge knob is the only fully reliable calibration.
    */
   yawOffsetRad?: number;
+  /**
+   * When true, treat `alpha` as a CW heading (the iOS / most-Android
+   * implementation) rather than a CCW W3C yaw. Negates alpha before
+   * feeding into the Euler. Without this, turning the phone to the right
+   * makes the synthetic sky pan to the left — the symptom of horizontal
+   * inversion users hit on their first AR session.
+   */
+  flipHorizontalAlpha?: boolean;
 }
 
 export interface AltAzDeg {
@@ -96,10 +104,14 @@ function deviceOrientationQuaternion(
   input: OrientationInput,
   outQ: Quaternion = new Quaternion(),
 ): Quaternion | null {
-  const { alpha, beta, gamma, screenAngle, yawOffsetRad } = input;
+  const { alpha, beta, gamma, screenAngle, yawOffsetRad, flipHorizontalAlpha } =
+    input;
   if (alpha == null || beta == null || gamma == null) return null;
 
-  tmpEuler.set(beta * DEG2RAD, alpha * DEG2RAD, -gamma * DEG2RAD, "YXZ");
+  // Flip alpha sign when the device reports it as a CW compass heading
+  // instead of the W3C-spec CCW yaw. See `OrientationInput` doc-comment.
+  const alphaUsed = flipHorizontalAlpha ? -alpha : alpha;
+  tmpEuler.set(beta * DEG2RAD, alphaUsed * DEG2RAD, -gamma * DEG2RAD, "YXZ");
   outQ.setFromEuler(tmpEuler);
   outQ.multiply(Q_PHONE_TO_WORLD);
   tmpScreenQ.setFromAxisAngle(Z_AXIS, -screenAngle * DEG2RAD);

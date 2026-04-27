@@ -6,7 +6,18 @@
  *
  * Camera always sits at the origin. Stars and other celestial objects sit on
  * a sphere of radius CELESTIAL_RADIUS; the camera quaternion alone determines
- * what's on screen. Mouse drag yaws/pitches; wheel zooms FOV.
+ * what's on screen.
+ *
+ * Input model:
+ *   • 1 finger (or mouse drag) → yaw/pitch.
+ *   • 2 fingers → pinch (FOV), twist (roll), and centroid-drag (yaw/pitch),
+ *     all simultaneously. Same model as Google Maps / Earth — the user
+ *     never has to commit to one gesture.
+ *   • Wheel → FOV.
+ *   • AR/compass mode → device gyro drives the camera quaternion directly;
+ *     1-finger drag nudges the heading-calibration yaw offset; 2-finger
+ *     pinch still adjusts FOV, but pan/twist are inert (the gyro owns
+ *     orientation in that mode).
  */
 
 import { useEffect, useRef } from "react";
@@ -23,12 +34,18 @@ const TWEEN_DURATION_MS = 1500;
 const MIN_FOV = 12;
 const MAX_FOV = 95;
 
-interface YawPitch {
+interface YawPitchRoll {
   yaw: number;
   pitch: number;
+  /**
+   * Camera rotation around its own forward axis, in radians. Positive =
+   * the world appears to rotate CCW on screen. Driven by 2-finger twist;
+   * tweens reset it to 0 so fly-to destinations always land upright.
+   */
+  roll: number;
 }
 
-function dirToYawPitch(d: Vector3): YawPitch {
+function dirToYawPitch(d: Vector3): { yaw: number; pitch: number } {
   return {
     yaw: Math.atan2(d.z, d.x),
     pitch: Math.asin(MathUtils.clamp(d.y, -1, 1)),
@@ -40,14 +57,24 @@ function applyYawPitch(yaw: number, pitch: number, out: Vector3) {
   out.set(cp * Math.cos(yaw), Math.sin(pitch), cp * Math.sin(yaw));
 }
 
+interface PinchSnapshot {
+  /** Pixel distance between the two pointers on the previous tick. */
+  lastDist: number;
+  /** Screen-coord angle of (b - a) on the previous tick, in radians. */
+  lastAngle: number;
+  /** Centroid pixel coordinates on the previous tick. */
+  lastCx: number;
+  lastCy: number;
+}
+
 export function CameraRig() {
   const { camera, gl } = useThree();
-  const yp = useRef<YawPitch>({ yaw: 0, pitch: 0 });
+  const ypr = useRef<YawPitchRoll>({ yaw: 0, pitch: 0, roll: 0 });
   const lookTarget = useRef(new Vector3(1, 0, 0));
   const tween = useRef<{
     start: number;
-    from: YawPitch;
-    to: YawPitch;
+    from: YawPitchRoll;
+    to: YawPitchRoll;
     fromFov: number;
     toFov: number;
     duration: number;
@@ -55,7 +82,7 @@ export function CameraRig() {
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const pinch = useRef<{ initialDist: number; initialFov: number } | null>(null);
+  const pinch = useRef<PinchSnapshot | null>(null);
   const targetState = useViewer((s) => s.cameraTarget);
   const fovNudge = useViewer((s) => s.fovNudge);
   const setAnimating = useViewer((s) => s.setAnimating);
@@ -63,8 +90,6 @@ export function CameraRig() {
   const compassMode = useViewer((s) => s.compassMode);
   const compassModeRef = useRef(compassMode);
   compassModeRef.current = compassMode;
-  // Carries from compass-driven orientation back to manual when toggled off,
-  // avoiding a snap.
   const prevCompassMode = useRef(compassMode);
 
   useEffect(() => {
@@ -74,20 +99,42 @@ export function CameraRig() {
       (camera as { fov: number; updateProjectionMatrix: () => void }).fov = 55;
       (camera as { fov: number; updateProjectionMatrix: () => void }).updateProjectionMatrix();
     }
-    applyYawPitch(yp.current.yaw, yp.current.pitch, lookTarget.current);
+    applyYawPitch(ypr.current.yaw, ypr.current.pitch, lookTarget.current);
     camera.lookAt(lookTarget.current.clone().multiplyScalar(CELESTIAL_RADIUS));
   }, [camera]);
 
-  // Pointer drag handlers + multi-touch pinch.
   useEffect(() => {
     const dom = gl.domElement;
 
-    const pinchDist = () => {
+    const computePinch = (): {
+      dist: number;
+      angle: number;
+      cx: number;
+      cy: number;
+    } | null => {
       const pts = Array.from(pointers.current.values());
-      if (pts.length < 2) return 0;
+      if (pts.length < 2) return null;
       const a = pts[0];
       const b = pts[1];
-      return Math.hypot(b.x - a.x, b.y - a.y);
+      return {
+        dist: Math.hypot(b.x - a.x, b.y - a.y),
+        // Screen-coord +Y is down, so this angle measures CW visually.
+        angle: Math.atan2(b.y - a.y, b.x - a.x),
+        cx: (a.x + b.x) / 2,
+        cy: (a.y + b.y) / 2,
+      };
+    };
+
+    const startPinch = () => {
+      const data = computePinch();
+      if (!data) return;
+      pinch.current = {
+        lastDist: data.dist,
+        lastAngle: data.angle,
+        lastCx: data.cx,
+        lastCy: data.cy,
+      };
+      dragging.current = false;
     };
 
     const onDown = (e: PointerEvent) => {
@@ -100,21 +147,14 @@ export function CameraRig() {
       } catch {
         /* noop */
       }
-      // Single-pointer drag is captured in both modes. In normal mode it
-      // updates yaw/pitch; in AR mode it nudges the heading-calibration
-      // offset so the user can drag the synthetic sky into alignment with
-      // the real one.
       if (pointers.current.size === 1) {
+        // Normal mode → single-pointer drag = look around.
+        // AR mode    → single-pointer drag = nudge heading calibration.
         dragging.current = true;
         lastPos.current = { x: e.clientX, y: e.clientY };
         pinch.current = null;
       } else if (pointers.current.size === 2 && "fov" in camera) {
-        // Switch into pinch mode; suspend drag.
-        dragging.current = false;
-        pinch.current = {
-          initialDist: pinchDist(),
-          initialFov: (camera as { fov: number }).fov,
-        };
+        startPinch();
       }
     };
 
@@ -122,14 +162,60 @@ export function CameraRig() {
       if (!pointers.current.has(e.pointerId)) return;
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-      if (pointers.current.size === 2 && pinch.current && "fov" in camera) {
-        const dist = pinchDist();
-        if (dist > 0 && pinch.current.initialDist > 0) {
-          const cam = camera as { fov: number; updateProjectionMatrix: () => void };
-          const ratio = pinch.current.initialDist / dist;
-          cam.fov = clamp(pinch.current.initialFov * ratio, MIN_FOV, MAX_FOV);
+      if (pointers.current.size >= 2 && "fov" in camera) {
+        const data = computePinch();
+        if (!data) return;
+        // The pinch snapshot is created on touchdown; if a third finger
+        // joined after we started tracking, just refresh the snapshot
+        // off the first two (keeps things stable, no NaN on very-rapid
+        // 3-finger gestures).
+        if (!pinch.current) {
+          startPinch();
+          return;
+        }
+        const cam = camera as {
+          fov: number;
+          updateProjectionMatrix: () => void;
+        };
+
+        // ── Pinch (FOV) ───────────────────────────────────────────────
+        if (pinch.current.lastDist > 0 && data.dist > 0) {
+          const ratio = pinch.current.lastDist / data.dist;
+          cam.fov = clamp(cam.fov * ratio, MIN_FOV, MAX_FOV);
           cam.updateProjectionMatrix();
         }
+
+        // ── Twist (roll) and centroid pan (yaw/pitch) ────────────────
+        // Both are inert in AR mode — the gyro owns orientation, and any
+        // 2-finger orientation tweak would just fight the device pose.
+        if (!compassModeRef.current) {
+          const fovScale = cam.fov / 55;
+
+          const dx = data.cx - pinch.current.lastCx;
+          const dy = data.cy - pinch.current.lastCy;
+          ypr.current.yaw -= dx * DRAG_SENSITIVITY * fovScale;
+          ypr.current.pitch += dy * DRAG_SENSITIVITY * fovScale;
+          ypr.current.pitch = clamp(
+            ypr.current.pitch,
+            -PITCH_LIMIT,
+            PITCH_LIMIT,
+          );
+
+          let dAngle = data.angle - pinch.current.lastAngle;
+          // Wrap into [-π, π] so a gesture that crosses the ±π seam
+          // doesn't snap the camera halfway around.
+          if (dAngle > Math.PI) dAngle -= 2 * Math.PI;
+          if (dAngle < -Math.PI) dAngle += 2 * Math.PI;
+          // CCW twist on screen → dAngle < 0 (screen Y is flipped) →
+          // we want world to rotate CCW → camera rolls CW around its
+          // local +Z (the back direction). Negate to convert.
+          ypr.current.roll -= dAngle;
+        }
+
+        pinch.current.lastDist = data.dist;
+        pinch.current.lastAngle = data.angle;
+        pinch.current.lastCx = data.cx;
+        pinch.current.lastCy = data.cy;
         return;
       }
 
@@ -137,20 +223,14 @@ export function CameraRig() {
       const dx = e.clientX - lastPos.current.x;
       const dy = e.clientY - lastPos.current.y;
       lastPos.current = { x: e.clientX, y: e.clientY };
-      // Sensitivity scales with FOV so a finger sweep at 12° feels the same
-      // as at 90°.
       const fovScale = "fov" in camera ? (camera as { fov: number }).fov / 55 : 1;
       if (compassModeRef.current) {
-        // Calibration nudge. Only the horizontal component matters: the
-        // gyro-derived pitch is gravity-referenced and accurate, but the
-        // heading from north is the part that drifts (especially on iOS
-        // where alpha is referenced to whenever the page loaded).
         compassState.yawOffsetRad -= dx * DRAG_SENSITIVITY * fovScale;
         return;
       }
-      yp.current.yaw -= dx * DRAG_SENSITIVITY * fovScale;
-      yp.current.pitch += dy * DRAG_SENSITIVITY * fovScale;
-      yp.current.pitch = clamp(yp.current.pitch, -PITCH_LIMIT, PITCH_LIMIT);
+      ypr.current.yaw -= dx * DRAG_SENSITIVITY * fovScale;
+      ypr.current.pitch += dy * DRAG_SENSITIVITY * fovScale;
+      ypr.current.pitch = clamp(ypr.current.pitch, -PITCH_LIMIT, PITCH_LIMIT);
     };
 
     const onUp = (e: PointerEvent) => {
@@ -166,11 +246,16 @@ export function CameraRig() {
       if (pointers.current.size === 0) {
         dragging.current = false;
       } else if (pointers.current.size === 1) {
-        // Resume single-pointer drag from the surviving touch (calibration
-        // in AR mode, look-around in normal mode).
+        // One finger left → resume single-pointer drag from where it is,
+        // not from the now-stale centroid.
         dragging.current = true;
         const [pt] = pointers.current.values();
         lastPos.current = { x: pt.x, y: pt.y };
+      } else if (pointers.current.size >= 2) {
+        // A finger lifted but two are still down (rare: 3-finger gesture
+        // collapsing to 2). Re-snapshot so the next move tick computes
+        // a sensible delta.
+        startPinch();
       }
     };
 
@@ -185,7 +270,6 @@ export function CameraRig() {
     };
 
     const onTouchStart = (e: TouchEvent) => {
-      // Block the browser pinch-zoom and pull-to-refresh; we manage zoom.
       if (e.touches.length > 1) e.preventDefault();
     };
 
@@ -205,13 +289,11 @@ export function CameraRig() {
       dom.removeEventListener("touchstart", onTouchStart);
       dom.removeEventListener("touchmove", onTouchStart);
     };
-  }, [camera, gl]);
+  }, [camera, gl, markInteracted]);
 
-  // Kick off a fly-to tween when the camera target changes.
   useEffect(() => {
     if (typeof targetState.nonce !== "number") return;
     if (targetState.nonce === 0 && tween.current === null) {
-      // First-mount initialization: snap.
       const dir = raDecHoursToVec3(
         targetState.raHours,
         targetState.decDeg,
@@ -219,12 +301,9 @@ export function CameraRig() {
         new Vector3(),
       );
       const next = dirToYawPitch(dir);
-      yp.current = next;
+      ypr.current = { ...next, roll: 0 };
       return;
     }
-    // Camera target tweens (search results, sign reveal) are meaningless when
-    // the user is physically aiming the device. Only honor the destination
-    // FOV in that case.
     if (compassModeRef.current) {
       if (targetState.fovDeg && "fov" in camera) {
         const cam = camera as { fov: number; updateProjectionMatrix: () => void };
@@ -240,15 +319,20 @@ export function CameraRig() {
       new Vector3(),
     );
     const to = dirToYawPitch(dir);
-    const from: YawPitch = { yaw: yp.current.yaw, pitch: yp.current.pitch };
+    const from: YawPitchRoll = {
+      yaw: ypr.current.yaw,
+      pitch: ypr.current.pitch,
+      roll: ypr.current.roll,
+    };
     const adjustedToYaw = shortestAngle(from.yaw, to.yaw);
-    const fromFov =
-      "fov" in camera ? (camera as { fov: number }).fov : 55;
+    const fromFov = "fov" in camera ? (camera as { fov: number }).fov : 55;
     const toFov = targetState.fovDeg ?? fromFov;
     tween.current = {
       start: performance.now(),
       from,
-      to: { yaw: adjustedToYaw, pitch: to.pitch },
+      // Fly-to destinations always land with the celestial pole as up —
+      // any roll the user dialed in earlier is unwound during the tween.
+      to: { yaw: adjustedToYaw, pitch: to.pitch, roll: 0 },
       fromFov,
       toFov,
       duration: TWEEN_DURATION_MS,
@@ -257,13 +341,15 @@ export function CameraRig() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetState.nonce]);
 
-  // Apply external FOV nudges (zoom buttons / keyboard shortcuts).
   useEffect(() => {
     if (fovNudge.nonce === 0) return;
     if (!("fov" in camera)) return;
     const cam = camera as { fov: number; updateProjectionMatrix: () => void };
     if (Number.isNaN(fovNudge.delta) || fovNudge.delta === 0) {
       cam.fov = 55;
+      // "Reset zoom" also unwinds any user-dialed roll. Keeps the recovery
+      // path single-tap when the view ends up sideways.
+      ypr.current.roll = 0;
     } else {
       cam.fov = clamp(cam.fov * Math.exp(fovNudge.delta), MIN_FOV, MAX_FOV);
     }
@@ -273,11 +359,6 @@ export function CameraRig() {
   }, [fovNudge.nonce]);
 
   useFrame(() => {
-    // Compass mode: copy the live device-driven quaternion straight onto the
-    // camera. We bypass the yaw/pitch path entirely because that loses the
-    // device's *roll* and forces the camera-up vector to be the celestial
-    // pole instead of the local zenith — which is exactly what tilted the
-    // rendered horizon in the first place.
     if (compassModeRef.current) {
       tween.current = null;
       if (compassState.hasReading) {
@@ -295,13 +376,11 @@ export function CameraRig() {
     }
 
     if (prevCompassMode.current) {
-      // Just toggled off. Derive yaw/pitch from the camera's current forward
-      // direction so manual control resumes from wherever the device was
-      // last pointed. Roll is intentionally dropped — manual mode keeps the
-      // celestial pole as up.
       _arForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
-      yp.current = dirToYawPitch(_arForward);
-      yp.current.pitch = clamp(yp.current.pitch, -PITCH_LIMIT, PITCH_LIMIT);
+      const next = dirToYawPitch(_arForward);
+      ypr.current.yaw = next.yaw;
+      ypr.current.pitch = clamp(next.pitch, -PITCH_LIMIT, PITCH_LIMIT);
+      ypr.current.roll = 0;
       tween.current = null;
       prevCompassMode.current = false;
     }
@@ -310,8 +389,9 @@ export function CameraRig() {
       const t = (performance.now() - tween.current.start) / tween.current.duration;
       const tc = clamp(t, 0, 1);
       const e = easeInOutCubic(tc);
-      yp.current.yaw = lerp(tween.current.from.yaw, tween.current.to.yaw, e);
-      yp.current.pitch = lerp(tween.current.from.pitch, tween.current.to.pitch, e);
+      ypr.current.yaw = lerp(tween.current.from.yaw, tween.current.to.yaw, e);
+      ypr.current.pitch = lerp(tween.current.from.pitch, tween.current.to.pitch, e);
+      ypr.current.roll = lerp(tween.current.from.roll, tween.current.to.roll, e);
       if ("fov" in camera) {
         const cam = camera as { fov: number; updateProjectionMatrix: () => void };
         cam.fov = lerp(tween.current.fromFov, tween.current.toFov, e);
@@ -322,16 +402,20 @@ export function CameraRig() {
         setAnimating(false);
       }
     }
-    applyYawPitch(yp.current.yaw, yp.current.pitch, lookTarget.current);
+    applyYawPitch(ypr.current.yaw, ypr.current.pitch, lookTarget.current);
     camera.position.set(0, 0, 0);
     camera.up.set(0, 1, 0);
     camera.lookAt(lookTarget.current.clone().multiplyScalar(CELESTIAL_RADIUS));
+    if (ypr.current.roll !== 0) {
+      // Post-multiply: rotation in the camera's local frame, around its
+      // own back axis. Doesn't change what the camera looks at — only
+      // how that view is oriented on screen.
+      camera.rotateZ(ypr.current.roll);
+    }
   });
 
   return null;
 }
 
-// Frame-loop scratch — kept module-level so AR mode allocates nothing per
-// tick at 60 Hz.
 const _arQuat = new Quaternion();
 const _arForward = new Vector3();

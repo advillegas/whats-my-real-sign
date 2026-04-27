@@ -1,7 +1,10 @@
 /**
  * Wrappers over `astronomy-engine` (Don Cross, MIT) for the bodies and quantities
- * we display on the sky. All RA values are returned in hours, Dec in degrees,
- * matching the convention used by the rest of the app.
+ * we display on the sky, plus a small set of celestial-sphere helpers (LMST,
+ * RA/Dec → alt/az) used by the observer-aware UI.
+ *
+ * RA values are returned/consumed in hours, Dec in degrees, and alt/az in
+ * degrees, matching the convention used throughout the app.
  */
 
 import {
@@ -104,6 +107,55 @@ export function sunSky(date: Date): BodySky {
 export function gastHours(date: Date): number {
   const t = new AstroTime(date);
   return SiderealTime(t);
+}
+
+/** Local Mean (Apparent) Sidereal Time at `lonDeg` for `date`, in hours. */
+export function lmstHours(date: Date, lonDeg: number): number {
+  const gast = gastHours(date);
+  // Astronomical convention: east longitude positive.
+  const lst = gast + lonDeg / 15;
+  let h = lst % 24;
+  if (h < 0) h += 24;
+  return h;
+}
+
+export interface AltAz {
+  /** Altitude in degrees, -90 (nadir) .. +90 (zenith). */
+  alt: number;
+  /** Azimuth in degrees, 0 = north, 90 = east, 180 = south, 270 = west. */
+  az: number;
+}
+
+/**
+ * Convert apparent RA/Dec (hours/degrees, J2000 close enough for display purposes)
+ * to topocentric altitude/azimuth at observer (`latDeg`, `lonDeg`) for `date`.
+ *
+ * Uses the standard formulae: H = LST - RA, then
+ *   sin(alt) = sin(δ)·sin(φ) + cos(δ)·cos(φ)·cos(H)
+ *   tan(az)  = -cos(δ)·sin(H) / (sin(δ)·cos(φ) - cos(δ)·sin(φ)·cos(H))
+ * Azimuth is normalized to [0, 360), measured eastward from north.
+ */
+export function raDecToAltAz(
+  raHours: number,
+  decDeg: number,
+  latDeg: number,
+  lonDeg: number,
+  date: Date,
+): AltAz {
+  const lst = lmstHours(date, lonDeg);
+  const haDeg = ((lst - raHours) * 15 + 540) % 360 - 180;
+  const ha = (haDeg * Math.PI) / 180;
+  const dec = (decDeg * Math.PI) / 180;
+  const lat = (latDeg * Math.PI) / 180;
+  const sinAlt =
+    Math.sin(dec) * Math.sin(lat) + Math.cos(dec) * Math.cos(lat) * Math.cos(ha);
+  const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
+  const y = -Math.cos(dec) * Math.sin(ha);
+  const x =
+    Math.sin(dec) * Math.cos(lat) - Math.cos(dec) * Math.sin(lat) * Math.cos(ha);
+  let az = Math.atan2(y, x);
+  if (az < 0) az += 2 * Math.PI;
+  return { alt: (alt * 180) / Math.PI, az: (az * 180) / Math.PI };
 }
 
 export { AstroTime };

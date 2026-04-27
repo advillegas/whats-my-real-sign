@@ -2,9 +2,11 @@
  * Builds compact JSON catalogs in public/data/ from public astronomical data sources.
  *
  * Sources:
- *  - HYG Database v3 (CC-BY-SA) — stars: position, magnitude, B-V color, names.
+ *  - HYG Database v3/v4 (CC-BY-SA) — stars: position, magnitude, B-V color, names,
+ *    spectral type, distance, absolute magnitude, variable flag, cross-IDs.
  *  - d3-celestial (MIT) — IAU constellation lines, boundaries, names/centers.
- *  - OpenNGC (CC-BY-SA-4.0) — Messier + bright NGC/IC deep-sky objects.
+ *  - OpenNGC (CC-BY-SA-4.0) — Messier + bright NGC/IC deep-sky objects with
+ *    common names, sizes, position angles, cross-catalog IDs.
  *
  * Run with: npm run build:catalogs
  *
@@ -14,7 +16,7 @@
  *  public/data/constellation-lines.json
  *  public/data/constellation-boundaries.json
  *  public/data/constellation-meta.json
- *  public/data/dso.json             (Messier + brightest NGC/IC, mag <= 10)
+ *  public/data/dso.json             (Messier + NGC/IC with mag <= 12)
  */
 
 import { promises as fs } from "node:fs";
@@ -108,7 +110,7 @@ function parseRow(line: string): string[] {
 }
 
 interface StarRecord {
-  /** id (HYG hip / HD when available, else hyg id) */
+  /** id (HIPxxxx, HDxxxx, HYGxxxx) */
   id: string;
   /** Right Ascension in hours (J2000) */
   ra: number;
@@ -124,6 +126,22 @@ interface StarRecord {
   bf?: string;
   /** Constellation IAU 3-letter code (e.g. "Ori") */
   con?: string;
+  /** Spectral type, e.g. "G2V" */
+  spect?: string;
+  /** Distance in parsecs (from parallax) */
+  distPc?: number;
+  /** Absolute V magnitude */
+  absMag?: number;
+  /** Variable star flag */
+  variable?: boolean;
+  /** HD (Henry Draper) catalog number */
+  hd?: string;
+  /** HIP (Hipparcos) catalog number */
+  hip?: string;
+  /** HR (Yale Bright Star) number */
+  hr?: string;
+  /** Gliese number */
+  gl?: string;
 }
 
 function buildStars(csv: string, magLimit: number): StarRecord[] {
@@ -132,6 +150,8 @@ function buildStars(csv: string, magLimit: number): StarRecord[] {
   const iId = idx("id");
   const iHip = idx("hip");
   const iHd = idx("hd");
+  const iHr = idx("hr");
+  const iGl = idx("gl");
   const iProper = idx("proper");
   const iBf = idx("bf");
   const iCon = idx("con");
@@ -139,6 +159,10 @@ function buildStars(csv: string, magLimit: number): StarRecord[] {
   const iDec = idx("dec");
   const iMag = idx("mag");
   const iCi = idx("ci");
+  const iSpect = idx("spect");
+  const iDist = idx("dist");
+  const iAbsMag = idx("absmag");
+  const iVar = idx("var");
 
   const out: StarRecord[] = [];
   for (const r of rows) {
@@ -153,6 +177,12 @@ function buildStars(csv: string, magLimit: number): StarRecord[] {
     const con = r[iCon]?.trim();
     const hip = r[iHip]?.trim();
     const hd = r[iHd]?.trim();
+    const hr = iHr >= 0 ? r[iHr]?.trim() : undefined;
+    const gl = iGl >= 0 ? r[iGl]?.trim() : undefined;
+    const spect = iSpect >= 0 ? r[iSpect]?.trim() : undefined;
+    const distRaw = iDist >= 0 ? parseFloat(r[iDist]) : NaN;
+    const absMagRaw = iAbsMag >= 0 ? parseFloat(r[iAbsMag]) : NaN;
+    const varRaw = iVar >= 0 ? r[iVar]?.trim() : undefined;
     // The HYG catalog includes the Sun as entry id=0 ("Sol", mag -26.7) parked
     // at RA=0, Dec=0. We render the Sun ourselves with a textured photosphere
     // and corona, so skip the catalog entry — otherwise it shows up as a
@@ -171,6 +201,19 @@ function buildStars(csv: string, magLimit: number): StarRecord[] {
     if (proper) star.name = proper;
     if (bf) star.bf = bf;
     if (con) star.con = con;
+    if (spect) star.spect = spect;
+    // HYG uses 100000 pc as a sentinel for "distance unknown / negative parallax".
+    // Skip implausible distances (< 0 or >= 1e5 pc).
+    if (Number.isFinite(distRaw) && distRaw > 0 && distRaw < 100000) {
+      star.distPc = round(distRaw, 1);
+    }
+    if (Number.isFinite(absMagRaw)) star.absMag = round(absMagRaw, 2);
+    // var column: empty / "" = not variable. Anything else (designation, type) → variable.
+    if (varRaw && varRaw !== "" && varRaw !== "0") star.variable = true;
+    if (hd) star.hd = hd;
+    if (hip) star.hip = hip;
+    if (hr) star.hr = hr;
+    if (gl) star.gl = gl;
     out.push(star);
   }
   out.sort((a, b) => a.mag - b.mag);
@@ -191,9 +234,19 @@ interface DsoRecord {
   type: string;
   /** size in arcmin (major axis) */
   size?: number;
+  /** minor axis arcmin (for ellipse rendering) */
+  sizeMinor?: number;
+  /** position angle of major axis, degrees east of north */
+  posAngle?: number;
   name?: string;
+  /** Additional common names beyond the primary `name` */
+  commonNames?: string[];
   /** Messier number if applicable */
   m?: number;
+  /** NGC catalog id (e.g. "NGC 224") if applicable */
+  ngc?: string;
+  /** IC catalog id if applicable */
+  ic?: string;
   con?: string;
 }
 
@@ -227,8 +280,12 @@ function buildDso(ngcText: string, addendumText: string): DsoRecord[] {
     const iVmag = idx("V-Mag");
     const iBmag = idx("B-Mag");
     const iMaj = idx("MajAx");
+    const iMin = idx("MinAx");
+    const iPa = idx("PosAng");
     const iCommon = idx("Common names");
     const iMessier = idx("M");
+    const iNgc = idx("NGC");
+    const iIc = idx("IC");
     const iCon = idx("Const");
     for (let i = 1; i < lines.length; i++) {
       const cells = lines[i].split(";");
@@ -242,8 +299,8 @@ function buildDso(ngcText: string, addendumText: string): DsoRecord[] {
       const mag = Number.isFinite(vmag) ? vmag : Number.isFinite(bmag) ? bmag : 99;
       const messierStr = cells[iMessier]?.trim();
       const isMessier = messierStr && messierStr !== "" && messierStr !== "0";
-      // keep all messier, otherwise mag <= 10
-      if (!isMessier && mag > 10) continue;
+      // keep all messier, otherwise mag <= 12
+      if (!isMessier && mag > 12) continue;
       const dso: DsoRecord = {
         id: cells[iName]?.trim() || `DSO${i}`,
         ra: round(ra, 5),
@@ -253,9 +310,26 @@ function buildDso(ngcText: string, addendumText: string): DsoRecord[] {
       };
       const maj = parseFloat(cells[iMaj] || "");
       if (Number.isFinite(maj)) dso.size = round(maj, 2);
+      const min = iMin >= 0 ? parseFloat(cells[iMin] || "") : NaN;
+      if (Number.isFinite(min)) dso.sizeMinor = round(min, 2);
+      const pa = iPa >= 0 ? parseFloat(cells[iPa] || "") : NaN;
+      if (Number.isFinite(pa)) dso.posAngle = round(pa, 1);
       const common = cells[iCommon]?.trim();
-      if (common) dso.name = common.split(",")[0].trim();
+      if (common) {
+        const names = common
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        if (names.length > 0) {
+          dso.name = names[0];
+          if (names.length > 1) dso.commonNames = names.slice(1);
+        }
+      }
       if (isMessier) dso.m = parseInt(messierStr!, 10);
+      const ngcCell = iNgc >= 0 ? cells[iNgc]?.trim() : undefined;
+      if (ngcCell) dso.ngc = ngcCell;
+      const icCell = iIc >= 0 ? cells[iIc]?.trim() : undefined;
+      if (icCell) dso.ic = icCell;
       const con = cells[iCon]?.trim();
       if (con) dso.con = con;
       out.push(dso);

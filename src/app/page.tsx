@@ -6,12 +6,15 @@ import { SignReveal } from "@/components/ui/SignReveal";
 import { DateScrubber } from "@/components/ui/DateScrubber";
 import { LayerToggles } from "@/components/ui/LayerToggles";
 import { ObjectInfoPanel } from "@/components/ui/ObjectInfoPanel";
-import { SearchPalette } from "@/components/ui/SearchPalette";
+import { TopBar } from "@/components/ui/TopBar";
 import { ApodCard } from "@/components/ui/ApodCard";
 import { HelpHint } from "@/components/ui/HelpHint";
 import { ZoomControls } from "@/components/ui/ZoomControls";
+import { CoordinateHUD } from "@/components/ui/CoordinateHUD";
+import { UrlStateSync } from "@/components/ui/UrlStateSync";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
+import { parseUrl } from "@/lib/url-state";
 
 const Scene = dynamic(() => import("@/components/StarMap/Scene").then((m) => m.Scene), {
   ssr: false,
@@ -28,6 +31,11 @@ const Scene = dynamic(() => import("@/components/StarMap/Scene").then((m) => m.S
 function AimAtTodaysSun() {
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
   useEffect(() => {
+    // If the URL is encoding a deep-link view, don't override it.
+    if (typeof window !== "undefined") {
+      const v = parseUrl();
+      if (typeof v.ra === "number" && typeof v.dec === "number") return;
+    }
     const sun = sunSky(new Date());
     setCameraTarget(sun.ra, sun.dec, 55);
   }, [setCameraTarget]);
@@ -51,6 +59,7 @@ export default function Home() {
       <Scene />
       <AimAtTodaysSun />
       <MobileTooltipDefault />
+      <UrlStateSync />
 
       <header className="absolute top-0 inset-x-0 px-3 pt-3 sm:px-5 sm:pt-5 safe-top safe-left safe-right flex items-start justify-between gap-3 pointer-events-none z-10">
         <div className="pointer-events-auto">
@@ -62,9 +71,11 @@ export default function Home() {
           </div>
         </div>
         <div className="pointer-events-auto">
-          <SearchPalette />
+          <TopBar />
         </div>
       </header>
+
+      <CoordinateHUD />
 
       <div className="absolute top-14 sm:top-24 left-2 right-2 sm:left-5 sm:right-auto sm:max-w-sm pointer-events-auto z-10">
         <SignReveal />
@@ -90,7 +101,34 @@ export default function Home() {
       </div>
 
       <div className="absolute bottom-0 inset-x-0 text-center text-[9px] sm:text-[10px] text-white/30 pointer-events-none z-0 hidden md:block px-2 pb-1 safe-bottom">
-        Milky Way panorama:{" "}
+        <span className="hidden lg:inline">Stars: </span>
+        <a
+          href="http://www.astronexus.com/hyg"
+          className="underline pointer-events-auto"
+          target="_blank"
+          rel="noreferrer"
+        >
+          HYG v4.1
+        </a>{" · "}
+        <span className="hidden lg:inline">DSOs: </span>
+        <a
+          href="https://github.com/mattiaverga/OpenNGC"
+          className="underline pointer-events-auto"
+          target="_blank"
+          rel="noreferrer"
+        >
+          OpenNGC
+        </a>{" · "}
+        <span className="hidden lg:inline">Constellations: </span>
+        <a
+          href="https://github.com/ofrohn/d3-celestial"
+          className="underline pointer-events-auto"
+          target="_blank"
+          rel="noreferrer"
+        >
+          d3-celestial
+        </a>{" · "}
+        <span className="hidden lg:inline">Milky Way: </span>
         <a
           href="https://www.eso.org/public/images/eso0932a/"
           className="underline pointer-events-auto"
@@ -98,8 +136,8 @@ export default function Home() {
           rel="noreferrer"
         >
           ESO/S. Brunier
-        </a>{" "}
-        · Planet textures:{" "}
+        </a>{" · "}
+        <span className="hidden lg:inline">Planet textures: </span>
         <a
           href="https://www.solarsystemscope.com/textures/"
           className="underline pointer-events-auto"
@@ -107,8 +145,7 @@ export default function Home() {
           rel="noreferrer"
         >
           Solar System Scope
-        </a>{" "}
-        (CC BY 4.0)
+        </a>{" · DSO images via Wikimedia Commons"}
       </div>
     </div>
   );

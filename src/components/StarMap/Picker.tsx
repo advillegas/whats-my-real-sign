@@ -5,6 +5,12 @@
  * (and any deep-sky-object cloud passed in as a prop) and dispatches the
  * matching record to the viewer store. Sun/planets handle their own clicks via
  * R3F event handlers on their meshes.
+ *
+ * Selection tolerances scale with the camera FOV: a "click within ~0.5° of a
+ * star" feels right when zoomed in to 12°, but at the all-sky 95° view we
+ * want the tolerance to relax to a couple of degrees so users can grab dim
+ * stars without surgical aim. The Raycaster `Points` threshold scales the
+ * same way.
  */
 
 import { useEffect, useRef } from "react";
@@ -20,11 +26,16 @@ import {
   type ConstellationBoundary,
   type ConstellationMeta,
 } from "@/lib/constellations";
+import { starBlurb, dsoBlurb } from "@/lib/object-info";
 
 interface Props {
   stars: StarRecord[];
   dso: DsoRecord[];
 }
+
+const STAR_TOL_AT_55 = 0.012; // radians, ~0.69°
+const DSO_TOL_AT_55 = 0.018; // ~1.03°
+const POINTS_THRESH_AT_55 = 6; // raycaster threshold, units (= world-units on a 1000R sphere ~ 0.34°)
 
 export function Picker({ stars, dso }: Props) {
   const { gl, camera, scene } = useThree();
@@ -73,10 +84,17 @@ export function Picker({ stars, dso }: Props) {
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
         -(((e.clientY - rect.top) / rect.height) * 2 - 1),
       );
+
+      const cam = camera as { fov?: number };
+      const fov = cam.fov ?? 55;
+      const fovScale = fov / 55;
+      const starTol = STAR_TOL_AT_55 * fovScale;
+      const dsoTol = DSO_TOL_AT_55 * fovScale;
+      const pointsThresh = POINTS_THRESH_AT_55 * fovScale;
+
       const raycaster = new Raycaster();
       raycaster.setFromCamera(ndc, camera);
-      // Generous threshold for Points
-      raycaster.params.Points = { threshold: 6 };
+      raycaster.params.Points = { threshold: pointsThresh };
       const targets: Object3D[] = [];
       scene.traverse((o) => {
         if ((o as { isPoints?: boolean }).isPoints) targets.push(o);
@@ -91,9 +109,9 @@ export function Picker({ stars, dso }: Props) {
         const bestDso = nearest(v, dso);
         const useStar =
           bestStar && (!bestDso || bestStar.angle < bestDso.angle);
-        if (useStar && bestStar && bestStar.angle < 0.012) {
+        if (useStar && bestStar && bestStar.angle < starTol) {
           const s = bestStar.record;
-          setCameraTarget(s.ra, s.dec, 25);
+          setCameraTarget(s.ra, s.dec, Math.min(fov, 25));
           if (tooltipsEnabledRef.current) {
             setSelected({
               id: s.id,
@@ -104,13 +122,14 @@ export function Picker({ stars, dso }: Props) {
               mag: s.mag,
               wikiTitle: s.name,
               blurb: starBlurb(s),
+              record: s,
             });
           }
           return;
         }
-        if (bestDso && bestDso.angle < 0.018) {
+        if (bestDso && bestDso.angle < dsoTol) {
           const d = bestDso.record;
-          setCameraTarget(d.ra, d.dec, 18);
+          setCameraTarget(d.ra, d.dec, Math.min(fov, 18));
           if (tooltipsEnabledRef.current) {
             setSelected({
               id: d.id,
@@ -119,17 +138,16 @@ export function Picker({ stars, dso }: Props) {
               dec: d.dec,
               kind: "dso",
               mag: d.mag,
-              wikiTitle: d.m ? `Messier ${d.m}` : d.id,
+              wikiTitle: d.m ? `Messier ${d.m}` : d.name ?? d.id,
               blurb: dsoBlurb(d),
+              record: d,
             });
           }
           return;
         }
       }
 
-      // 2) Fall through to constellation: which IAU constellation contains
-      //    the click direction? This is essential on touch where hover
-      //    doesn't fire and there's no precise point to aim at.
+      // 2) Fall through to constellation.
       const bounds = boundsRef.current;
       const meta = metaRef.current;
       if (!bounds || !meta) return;
@@ -187,52 +205,4 @@ function nearest<T extends { ra: number; dec: number }>(
   }
   if (!best) return null;
   return { record: best, angle: Math.acos(Math.max(-1, Math.min(1, bestDot))) };
-}
-
-function starBlurb(s: StarRecord): string {
-  const parts: string[] = [];
-  if (s.bf) parts.push(s.bf);
-  if (s.con) parts.push(`in ${s.con}`);
-  parts.push(`magnitude ${s.mag.toFixed(2)}`);
-  return parts.join(" • ");
-}
-
-function dsoBlurb(d: DsoRecord): string {
-  const parts: string[] = [];
-  if (d.m) parts.push(`Messier ${d.m}`);
-  parts.push(typeName(d.type));
-  if (d.con) parts.push(`in ${d.con}`);
-  if (Number.isFinite(d.mag)) parts.push(`mag ${d.mag.toFixed(2)}`);
-  return parts.join(" • ");
-}
-
-function typeName(t: string): string {
-  switch (t) {
-    case "G":
-      return "Galaxy";
-    case "GPair":
-      return "Galaxy pair";
-    case "GTrpl":
-      return "Galaxy triplet";
-    case "GGroup":
-      return "Galaxy group";
-    case "GCl":
-      return "Globular cluster";
-    case "OCl":
-      return "Open cluster";
-    case "PN":
-      return "Planetary nebula";
-    case "EmN":
-      return "Emission nebula";
-    case "RfN":
-      return "Reflection nebula";
-    case "SNR":
-      return "Supernova remnant";
-    case "HII":
-      return "HII region";
-    case "Neb":
-      return "Nebula";
-    default:
-      return t;
-  }
 }

@@ -13,9 +13,20 @@ import { ConstellationHighlight } from "./ConstellationHighlight";
 import { Sun } from "./Sun";
 import { Planets } from "./Planets";
 import { DeepSkyObjects } from "./DeepSkyObjects";
+import { DsoExtent } from "./DsoExtent";
+import { ReferenceFrames } from "./ReferenceFrames";
+import { Horizon } from "./Horizon";
+import { BrightStarLabels } from "./BrightStarLabels";
 import { CameraRig } from "./CameraRig";
 import { Picker } from "./Picker";
-import { loadStars, loadDeepSky, type StarRecord, type DsoRecord } from "@/lib/catalogs";
+import { CoordinateHUDFeeder } from "@/components/ui/CoordinateHUD";
+import {
+  loadStars,
+  loadStarsBootstrap,
+  loadDeepSky,
+  type StarRecord,
+  type DsoRecord,
+} from "@/lib/catalogs";
 
 function detectMobile(): boolean {
   if (typeof window === "undefined") return false;
@@ -29,13 +40,26 @@ export function Scene() {
   const [dso, setDso] = useState<DsoRecord[] | null>(null);
   const isMobile = useMemo(() => detectMobile(), []);
 
+  // Two-stage load: bootstrap (~9k bright stars, ~1.5 MB) lights up the sky
+  // immediately, then the deep mag-8.5 catalog (~62k stars, ~9 MB) replaces it.
   useEffect(() => {
     let alive = true;
-    Promise.all([loadStars(), loadDeepSky()]).then(([s, d]) => {
-      if (!alive) return;
+    let bootstrapDone = false;
+
+    loadStarsBootstrap().then((s) => {
+      if (!alive || bootstrapDone) return;
       setStars(s);
+    });
+    loadStars().then((s) => {
+      if (!alive) return;
+      bootstrapDone = true;
+      setStars(s);
+    });
+    loadDeepSky().then((d) => {
+      if (!alive) return;
       setDso(d);
     });
+
     return () => {
       alive = false;
     };
@@ -56,6 +80,7 @@ export function Scene() {
       style={{ position: "fixed", inset: 0, background: "black", touchAction: "none" }}
     >
       <CameraRig />
+      <CoordinateHUDFeeder />
       <Suspense fallback={null}>
         <MilkyWay quality={isMobile ? "low" : "high"} />
       </Suspense>
@@ -64,7 +89,11 @@ export function Scene() {
       <ConstellationLines />
       {stars && <ConstellationHighlight stars={stars} />}
       <ConstellationLabels />
+      <BrightStarLabels />
+      <ReferenceFrames />
+      <Horizon />
       <DeepSkyObjects />
+      <DsoExtent />
       <Suspense fallback={null}>
         <Sun />
       </Suspense>
@@ -81,7 +110,7 @@ export function Scene() {
           radius={isMobile ? 0.3 : 0.4}
         />
         <Vignette eskil={false} offset={0.2} darkness={0.55} />
-        <SMAA />{/* SMAA is cheap enough; mobile tuning happens via DPR + bloom radius */}
+        <SMAA />
       </EffectComposer>
     </Canvas>
   );

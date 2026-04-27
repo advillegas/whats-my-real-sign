@@ -15,25 +15,26 @@ export type LayerToggle =
   | "labels"
   | "milkyway"
   | "planets"
-  | "dso";
+  | "dso"
+  | "gridEquatorial"
+  | "gridEcliptic"
+  | "gridGalactic"
+  | "poles"
+  | "horizon";
 
 export interface SelectedObject {
-  /** Unique id (HIPxxx, NGCxxx, body name, etc.) */
   id: string;
-  /** Display name. */
   name: string;
-  /** RA hours, J2000. */
   ra: number;
-  /** Dec degrees, J2000. */
   dec: number;
-  /** Body kind for icon + behavior. */
   kind: "star" | "planet" | "dso" | "constellation";
-  /** Magnitude when known. */
   mag?: number;
-  /** Pre-canned local description (catalog blurb). */
   blurb?: string;
   /** Wikipedia article title to fetch a summary for, when applicable. */
   wikiTitle?: string;
+  /** Full StarRecord (for stars) or DsoRecord (for DSOs) for the info panel. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  record?: any;
 }
 
 export interface CameraTarget {
@@ -46,45 +47,52 @@ export interface CameraTarget {
 }
 
 export interface HoverInfo {
-  /** Display name. */
   name: string;
-  /** Optional secondary line (constellation, designation, etc.). */
   subtitle?: string;
-  /** Body kind for icon styling. */
   kind: "star" | "planet" | "dso" | "constellation";
   /** IAU 3-letter desig when this hover is over a constellation. */
   conDesig?: string;
-  /** Screen-space x in CSS pixels. */
   x: number;
-  /** Screen-space y in CSS pixels. */
   y: number;
 }
 
+export interface ObserverLocation {
+  /** Latitude in degrees, north positive. */
+  lat: number;
+  /** Longitude in degrees, east positive. */
+  lon: number;
+  /** Elevation in metres above sea level. */
+  elevationM: number;
+  /** Optional friendly name, e.g. "Greenwich, UK". */
+  name?: string;
+}
+
 interface ViewerState {
-  /** Currently displayed Julian Date (as JS Date). */
   date: Date;
-  /** Date the user has *requested* (may differ during a tween). */
   requestedDate: Date;
-  /** What the camera should be looking at. */
   cameraTarget: CameraTarget;
-  /** Currently selected object, if any. */
   selected: SelectedObject | null;
-  /** Currently hovered object, if any. */
   hover: HoverInfo | null;
-  /** Layer visibility toggles. */
   layers: Record<LayerToggle, boolean>;
-  /** Are we currently animating to a new target/date? */
   isAnimating: boolean;
-  /** Requested FOV change to be applied by CameraRig (positive = zoom out). */
   fovNudge: { delta: number; nonce: number };
-  /** True once the user has manually navigated (drag, scroll, pinch, click, search). */
   hasInteracted: boolean;
-  /**
-   * Show floating hover tooltips and auto-open the description panel when
-   * hovering labels. When false, the user can drag/zoom and tap to select
-   * without any tooltip popups — useful on mobile.
-   */
   tooltipsEnabled: boolean;
+  /**
+   * Optional surface observer. When non-null the HUD and info panel show
+   * alt/az alongside RA/Dec, the horizon disk renders, and below-horizon
+   * stars/DSOs are dimmed.
+   */
+  observer: ObserverLocation | null;
+  /**
+   * Live readout from the camera, written every frame by CoordinateHUD.
+   * Other UI (URL syncer, ObjectInfoPanel) reads from here.
+   */
+  cameraReadout: {
+    raHours: number;
+    decDeg: number;
+    fovDeg: number;
+  };
 
   setDate: (d: Date) => void;
   setCurrentJdDate: (d: Date) => void;
@@ -96,6 +104,8 @@ interface ViewerState {
   nudgeFov: (delta: number) => void;
   markInteracted: () => void;
   toggleTooltips: () => void;
+  setObserver: (o: ObserverLocation | null) => void;
+  setCameraReadout: (r: { raHours: number; decDeg: number; fovDeg: number }) => void;
 }
 
 const today = new Date();
@@ -114,11 +124,18 @@ export const useViewer = create<ViewerState>((set) => ({
     milkyway: true,
     planets: true,
     dso: true,
+    gridEquatorial: false,
+    gridEcliptic: false,
+    gridGalactic: false,
+    poles: false,
+    horizon: true,
   },
   isAnimating: false,
   fovNudge: { delta: 0, nonce: 0 },
   hasInteracted: false,
   tooltipsEnabled: true,
+  observer: null,
+  cameraReadout: { raHours: 0, decDeg: 0, fovDeg: 55 },
   setDate: (d) => set({ requestedDate: d, hasInteracted: true }),
   setCurrentJdDate: (d) => set({ date: d }),
   setCameraTarget: (raHours, decDeg, fovDeg) =>
@@ -147,6 +164,8 @@ export const useViewer = create<ViewerState>((set) => ({
         ? { tooltipsEnabled: next }
         : { tooltipsEnabled: next, hover: null, selected: null };
     }),
+  setObserver: (o) => set({ observer: o }),
+  setCameraReadout: (r) => set({ cameraReadout: r }),
 }));
 
 /**

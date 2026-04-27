@@ -11,7 +11,7 @@
 
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Vector3, MathUtils } from "three";
+import { Vector3, MathUtils, Quaternion } from "three";
 import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { clamp, easeInOutCubic, lerp, shortestAngle } from "@/lib/tween";
 import { useViewer } from "@/store/viewer-store";
@@ -263,43 +263,65 @@ export function CameraRig() {
   }, [fovNudge.nonce]);
 
   useFrame(() => {
-    // Compass mode: ignore tweens, copy live device orientation in. When
-    // toggling off, the latest compass yaw/pitch is left in `yp` so manual
-    // control resumes without a snap.
+    // Compass mode: copy the live device-driven quaternion straight onto the
+    // camera. We bypass the yaw/pitch path entirely because that loses the
+    // device's *roll* and forces the camera-up vector to be the celestial
+    // pole instead of the local zenith — which is exactly what tilted the
+    // rendered horizon in the first place.
     if (compassModeRef.current) {
-      if (compassState.hasReading) {
-        yp.current.yaw = compassState.yaw;
-        yp.current.pitch = clamp(compassState.pitch, -PITCH_LIMIT, PITCH_LIMIT);
-      }
       tween.current = null;
-      prevCompassMode.current = true;
-    } else {
-      if (prevCompassMode.current) {
-        // Just toggled off — drop any pending tween so manual handoff is clean.
-        tween.current = null;
-        prevCompassMode.current = false;
+      if (compassState.hasReading) {
+        camera.position.set(0, 0, 0);
+        _arQuat.set(
+          compassState.qx,
+          compassState.qy,
+          compassState.qz,
+          compassState.qw,
+        );
+        camera.quaternion.copy(_arQuat);
       }
-      if (tween.current) {
-        const t = (performance.now() - tween.current.start) / tween.current.duration;
-        const tc = clamp(t, 0, 1);
-        const e = easeInOutCubic(tc);
-        yp.current.yaw = lerp(tween.current.from.yaw, tween.current.to.yaw, e);
-        yp.current.pitch = lerp(tween.current.from.pitch, tween.current.to.pitch, e);
-        if ("fov" in camera) {
-          const cam = camera as { fov: number; updateProjectionMatrix: () => void };
-          cam.fov = lerp(tween.current.fromFov, tween.current.toFov, e);
-          cam.updateProjectionMatrix();
-        }
-        if (tc >= 1) {
-          tween.current = null;
-          setAnimating(false);
-        }
+      prevCompassMode.current = true;
+      return;
+    }
+
+    if (prevCompassMode.current) {
+      // Just toggled off. Derive yaw/pitch from the camera's current forward
+      // direction so manual control resumes from wherever the device was
+      // last pointed. Roll is intentionally dropped — manual mode keeps the
+      // celestial pole as up.
+      _arForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      yp.current = dirToYawPitch(_arForward);
+      yp.current.pitch = clamp(yp.current.pitch, -PITCH_LIMIT, PITCH_LIMIT);
+      tween.current = null;
+      prevCompassMode.current = false;
+    }
+
+    if (tween.current) {
+      const t = (performance.now() - tween.current.start) / tween.current.duration;
+      const tc = clamp(t, 0, 1);
+      const e = easeInOutCubic(tc);
+      yp.current.yaw = lerp(tween.current.from.yaw, tween.current.to.yaw, e);
+      yp.current.pitch = lerp(tween.current.from.pitch, tween.current.to.pitch, e);
+      if ("fov" in camera) {
+        const cam = camera as { fov: number; updateProjectionMatrix: () => void };
+        cam.fov = lerp(tween.current.fromFov, tween.current.toFov, e);
+        cam.updateProjectionMatrix();
+      }
+      if (tc >= 1) {
+        tween.current = null;
+        setAnimating(false);
       }
     }
     applyYawPitch(yp.current.yaw, yp.current.pitch, lookTarget.current);
     camera.position.set(0, 0, 0);
+    camera.up.set(0, 1, 0);
     camera.lookAt(lookTarget.current.clone().multiplyScalar(CELESTIAL_RADIUS));
   });
 
   return null;
 }
+
+// Frame-loop scratch — kept module-level so AR mode allocates nothing per
+// tick at 60 Hz.
+const _arQuat = new Quaternion();
+const _arForward = new Vector3();

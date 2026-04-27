@@ -55,36 +55,88 @@ export interface AltAzDeg {
 }
 
 /**
- * Translate a `DeviceOrientationEvent` to the altitude/azimuth the back of
- * the device is pointing. Returns null when any input angle is missing
- * (e.g. browser hasn't delivered a reading yet).
+ * The device's full orientation expressed as alt/az pairs for both the
+ * back-of-phone direction (where the rear camera points → "look") and the
+ * top-of-phone direction (→ "up", what the user calls screen-top).
+ *
+ * Both are needed because just knowing where the phone aims doesn't tell us
+ * how the phone is rolled around that axis. The `up` vector is what lets the
+ * rendered view roll correctly when the phone tilts sideways AND lets us
+ * align the local zenith (not the celestial pole) with screen-top.
  */
-export function deviceOrientationToAltAz(input: OrientationInput): AltAzDeg | null {
+export interface DeviceOrientationLookUp {
+  look: AltAzDeg;
+  up: AltAzDeg;
+}
+
+/**
+ * Build the rotation that takes a vector expressed in the device's local
+ * frame (right=+X, top=+Y, out-of-screen=+Z) into a Three.js-style world
+ * frame (east=+X, up=+Y, south=+Z, equivalently north=-Z).
+ *
+ * Recipe matches the long-standing `THREE.DeviceOrientationControls`:
+ *   1. Apply the device's intrinsic Z-X'-Y'' Euler angles
+ *   2. Multiply by a -π/2 rotation around X so the THREE camera ends up
+ *      looking out the *back* of the phone instead of out the *top*.
+ *   3. Multiply by a -screenAngle rotation around Z so the math holds when
+ *      the user rotates the phone into landscape mode.
+ */
+function deviceOrientationQuaternion(
+  input: OrientationInput,
+  outQ: Quaternion = new Quaternion(),
+): Quaternion | null {
   const { alpha, beta, gamma, screenAngle } = input;
   if (alpha == null || beta == null || gamma == null) return null;
 
-  // ZXY Euler order in radians, the convention DeviceOrientationEvent uses.
   tmpEuler.set(beta * DEG2RAD, alpha * DEG2RAD, -gamma * DEG2RAD, "YXZ");
-  tmpQ.setFromEuler(tmpEuler);
-  tmpQ.multiply(Q_PHONE_TO_WORLD);
+  outQ.setFromEuler(tmpEuler);
+  outQ.multiply(Q_PHONE_TO_WORLD);
   tmpScreenQ.setFromAxisAngle(Z_AXIS, -screenAngle * DEG2RAD);
-  tmpQ.multiply(tmpScreenQ);
+  outQ.multiply(tmpScreenQ);
+  return outQ;
+}
 
-  // Back-of-phone direction is -Z in the device frame.
-  tmpDir.set(0, 0, -1).applyQuaternion(tmpQ);
-
-  // World convention here: y up, -z forward, x right. After the corrections
-  // above, the phone-back vector reads as:
-  //   y → altitude (up component)
-  //   x, z → horizontal projection; azimuth measured clockwise from north.
-  const altDeg = Math.asin(Math.max(-1, Math.min(1, tmpDir.y))) * RAD2DEG;
-
-  // Azimuth: 0 = north (-z), 90 = east (+x), 180 = south, 270 = west.
-  let azRad = Math.atan2(tmpDir.x, -tmpDir.z);
+/**
+ * Convert a unit vector in the local east-north-up world frame used above
+ * (+X east, +Y up, -Z north) into astronomy-convention alt/az.
+ */
+function vecToAltAz(v: Vector3): AltAzDeg {
+  const altDeg = Math.asin(Math.max(-1, Math.min(1, v.y))) * RAD2DEG;
+  let azRad = Math.atan2(v.x, -v.z);
   if (azRad < 0) azRad += 2 * Math.PI;
-  const azDeg = azRad * RAD2DEG;
+  return { altDeg, azDeg: azRad * RAD2DEG };
+}
 
-  return { altDeg, azDeg };
+/**
+ * Translate a `DeviceOrientationEvent` to the altitude/azimuth the back of
+ * the device is pointing. Returns null when any input angle is missing.
+ */
+export function deviceOrientationToAltAz(input: OrientationInput): AltAzDeg | null {
+  const q = deviceOrientationQuaternion(input, tmpQ);
+  if (!q) return null;
+  tmpDir.set(0, 0, -1).applyQuaternion(q);
+  return vecToAltAz(tmpDir);
+}
+
+/**
+ * Translate a `DeviceOrientationEvent` to BOTH the look and screen-up
+ * directions in alt/az. Used by AR mode so we can build a full camera
+ * orientation (not just yaw/pitch) and keep the synthetic horizon glued to
+ * the real horizon as the phone rolls.
+ */
+const tmpLookV = new Vector3();
+const tmpUpV = new Vector3();
+export function deviceOrientationToLookUp(
+  input: OrientationInput,
+): DeviceOrientationLookUp | null {
+  const q = deviceOrientationQuaternion(input, tmpQ);
+  if (!q) return null;
+  tmpLookV.set(0, 0, -1).applyQuaternion(q);
+  tmpUpV.set(0, 1, 0).applyQuaternion(q);
+  return {
+    look: vecToAltAz(tmpLookV),
+    up: vecToAltAz(tmpUpV),
+  };
 }
 
 /**

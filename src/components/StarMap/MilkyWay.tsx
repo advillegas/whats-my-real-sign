@@ -17,12 +17,13 @@ import {
   BackSide,
   ClampToEdgeWrapping,
   LinearFilter,
+  LinearMipMapLinearFilter,
   ShaderMaterial,
   SphereGeometry,
   TextureLoader,
   SRGBColorSpace,
 } from "three";
-import { useLoader } from "@react-three/fiber";
+import { useLoader, useThree } from "@react-three/fiber";
 import { useViewer } from "@/store/viewer-store";
 import { CELESTIAL_RADIUS } from "@/lib/coordinates";
 
@@ -39,6 +40,14 @@ void main() {
 }
 `;
 
+/*
+ * The fragment shader does the texture lookup in galactic coordinates with
+ * mipmap+anisotropic filtering, plus a small high-frequency procedural
+ * "dust grain" perturbation that keeps the panorama from going visibly
+ * smooth/blurry when the user zooms in past the texture's native angular
+ * resolution. The grain is amplitude-modulated by local panorama luminance
+ * so it lives in the bright Milky Way regions and disappears in dark sky.
+ */
 const FS = /* glsl */ `
 precision highp float;
 varying vec3 vDir;
@@ -47,6 +56,31 @@ uniform vec3 uGalX;
 uniform vec3 uGalY;
 uniform vec3 uGalZ;
 uniform float uIntensity;
+
+float hash13(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float vnoise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float n000 = hash13(i + vec3(0.0, 0.0, 0.0));
+  float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+  float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+  float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+  float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+  float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+  float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+  float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+  return mix(
+    mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y),
+    mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y),
+    f.z
+  );
+}
 
 void main() {
   vec3 d = normalize(vDir);
@@ -58,8 +92,18 @@ void main() {
   float u = 0.5 - lon / 6.2831853;
   float v = 0.5 + lat / 3.1415927;
   vec3 col = texture2D(uTex, vec2(u, v)).rgb;
-  // Slight contrast lift + vignette so it feels deep.
   col = pow(col, vec3(1.15));
+
+  // High-frequency procedural grain so the texture doesn't look smooth at
+  // close zooms. Two octaves of value noise sampled in 3D so it tiles
+  // seamlessly across the sphere.
+  float lum = dot(col, vec3(0.299, 0.587, 0.114));
+  float grain = 0.0;
+  grain += (vnoise(d * 800.0) - 0.5) * 0.15;
+  grain += (vnoise(d * 2400.0) - 0.5) * 0.10;
+  // Modulate grain by luminance so dark sky stays dark.
+  col += vec3(grain) * smoothstep(0.05, 0.45, lum);
+
   gl_FragColor = vec4(col * uIntensity, 1.0);
 }
 `;
@@ -71,16 +115,22 @@ interface MilkyWayProps {
 export function MilkyWay({ quality = "high" }: MilkyWayProps) {
   const visible = useViewer((s) => s.layers.milkyway);
   const tex = useLoader(TextureLoader, "/textures/eso_milkyway.jpg");
+  const { gl } = useThree();
 
   const { geometry, material } = useMemo(() => {
     tex.colorSpace = SRGBColorSpace;
-    tex.minFilter = LinearFilter;
+    tex.minFilter = LinearMipMapLinearFilter;
     tex.magFilter = LinearFilter;
     tex.wrapS = ClampToEdgeWrapping;
     tex.wrapT = ClampToEdgeWrapping;
-    tex.anisotropy = quality === "low" ? 4 : 8;
-    const segW = quality === "low" ? 64 : 96;
-    const segH = quality === "low" ? 32 : 48;
+    tex.generateMipmaps = true;
+    // Anisotropic filtering keeps the panorama crisp at glancing angles
+    // (i.e. when the user zooms in close to the galactic plane).
+    const maxAniso = gl.capabilities.getMaxAnisotropy?.() ?? 8;
+    tex.anisotropy = quality === "low" ? Math.min(8, maxAniso) : Math.min(16, maxAniso);
+    tex.needsUpdate = true;
+    const segW = quality === "low" ? 64 : 128;
+    const segH = quality === "low" ? 32 : 64;
     const geo = new SphereGeometry(CELESTIAL_RADIUS * 0.99, segW, segH);
     const mat = new ShaderMaterial({
       vertexShader: VS,
@@ -97,7 +147,7 @@ export function MilkyWay({ quality = "high" }: MilkyWayProps) {
       },
     });
     return { geometry: geo, material: mat };
-  }, [tex, quality]);
+  }, [tex, quality, gl]);
 
   return (
     <mesh

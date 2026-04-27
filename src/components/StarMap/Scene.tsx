@@ -6,6 +6,7 @@ import { ACESFilmicToneMapping, SRGBColorSpace } from "three";
 import { EffectComposer, Bloom, Vignette, SMAA } from "@react-three/postprocessing";
 import { Stars } from "./Stars";
 import { MilkyWay } from "./MilkyWay";
+import { ProceduralStars } from "./ProceduralStars";
 import { ConstellationLines } from "./ConstellationLines";
 import { ConstellationBoundaries } from "./ConstellationBoundaries";
 import { ConstellationLabels } from "./ConstellationLabels";
@@ -84,6 +85,11 @@ export function Scene() {
       <Suspense fallback={null}>
         <MilkyWay quality={isMobile ? "low" : "high"} />
       </Suspense>
+      {!isMobile && (
+        <Suspense fallback={null}>
+          <ProceduralStars />
+        </Suspense>
+      )}
       {stars && <Stars stars={stars} />}
       <ConstellationBoundaries />
       <ConstellationLines />

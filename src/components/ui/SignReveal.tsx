@@ -33,6 +33,7 @@ function fmtYearLabel(jsYear: number): string {
 
 export function SignReveal() {
   const date = useViewer((s) => s.date);
+  const hasInteracted = useViewer((s) => s.hasInteracted);
   const [bounds, setBounds] = useState<ConstellationBoundary[] | null>(null);
   const [open, setOpen] = useState(true);
   const [showWhy, setShowWhy] = useState(false);
@@ -48,6 +49,9 @@ export function SignReveal() {
   }, []);
 
   if (!bounds) return null;
+  // While the welcome overlay is showing, hide this card so the Sun stays
+  // unobstructed and the two messages don't compete for attention.
+  if (!hasInteracted) return null;
   const sun = sunSky(date);
   const real = constellationAt(sun.ra, sun.dec, bounds);
   const tropical = sun.eclipticLongitude

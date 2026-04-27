@@ -1,127 +1,179 @@
 "use client";
 
 /**
- * Planets are tiny on the sky (sub-arcsecond at typical viewing FOVs), so
- * "realistic" here means "a small luminous shaded disc that looks like a real
- * planet through binoculars" rather than a 1:1 sphere. We render each planet
- * as:
- *   • A camera-facing circular billboard with a procedural shader that
- *     simulates a phase-lit sphere using the body→Sun direction in J2000.
- *     The terminator is anti-aliased and the limb has a subtle Lambert dim.
- *   • A faint HDR halo to engage bloom and give the brighter planets the
- *     "headlight" feel they have through optics.
- *   • Saturn additionally gets a thin disk for its ring.
+ * Planets rendered as real textured spheres with phase-correct Lambert lighting.
+ * Textures: Solar System Scope 2K maps (CC BY 4.0). The shader uses the
+ * world-space direction toward the Sun so the lit hemisphere always points
+ * Sunward, regardless of where the camera is looking.
  *
- * Sizes are exaggerated for visibility (real planets at this distance would be
- * sub-pixel). They scale roughly with apparent magnitude.
+ * Saturn additionally renders a textured ring disc with the actual axial tilt.
  */
 
 import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useLoader } from "@react-three/fiber";
 import {
+  AdditiveBlending,
   Color,
   DoubleSide,
+  RepeatWrapping,
   ShaderMaterial,
+  SRGBColorSpace,
+  TextureLoader,
   Vector3,
   type Group,
+  type Mesh,
 } from "three";
 import { CELESTIAL_RADIUS, raDecHoursToVec3 } from "@/lib/coordinates";
 import { allBodySky, type PlanetId } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
 
 interface PlanetStyle {
-  base: [number, number, number];
-  highlight: [number, number, number];
+  texture: string;
   size: number;
-  hasRing?: boolean;
-  ringColor?: [number, number, number];
+  /** Axial tilt in degrees. */
+  tilt: number;
+  /** Rotation rate (rad/sec, exaggerated for visibility). */
+  spin: number;
+  /** Whether this body has a luminous atmosphere we should rim-light. */
+  atmosphere?: [number, number, number];
+  /** Additive emissive boost so the lit side stays visible. */
+  emissive?: number;
+  /** Saturn ring data. */
+  ring?: {
+    innerScale: number;
+    outerScale: number;
+    texture: string;
+  };
 }
 
-const PLANET_STYLE: Record<PlanetId, PlanetStyle> = {
-  Sun: { base: [1, 0.85, 0.55], highlight: [1, 0.95, 0.8], size: 14 },
-  Moon: { base: [0.78, 0.82, 0.9], highlight: [1, 1, 1], size: 9 },
-  Mercury: { base: [0.55, 0.5, 0.45], highlight: [0.85, 0.8, 0.7], size: 4.2 },
-  Venus: { base: [0.95, 0.9, 0.7], highlight: [1, 1, 0.92], size: 6.2 },
-  Mars: { base: [0.65, 0.27, 0.15], highlight: [1, 0.55, 0.35], size: 5.0 },
-  Jupiter: { base: [0.78, 0.65, 0.5], highlight: [1, 0.9, 0.78], size: 8.5 },
-  Saturn: {
-    base: [0.78, 0.7, 0.5],
-    highlight: [1, 0.93, 0.75],
-    size: 7.4,
-    hasRing: true,
-    ringColor: [0.95, 0.86, 0.65],
+const PLANET_STYLE: Record<Exclude<PlanetId, "Sun">, PlanetStyle> = {
+  Moon: { texture: "/textures/moon.jpg", size: 9, tilt: 6.7, spin: 0.05 },
+  Mercury: { texture: "/textures/mercury.jpg", size: 4.5, tilt: 0.03, spin: 0.06 },
+  Venus: {
+    texture: "/textures/venus.jpg",
+    size: 6.5,
+    tilt: 177.4,
+    spin: -0.04,
+    atmosphere: [1.0, 0.95, 0.78],
   },
-  Uranus: { base: [0.55, 0.78, 0.85], highlight: [0.85, 0.97, 1.0], size: 5.4 },
-  Neptune: { base: [0.32, 0.45, 0.85], highlight: [0.55, 0.7, 1.0], size: 5.2 },
+  Mars: { texture: "/textures/mars.jpg", size: 5.4, tilt: 25.2, spin: 0.09 },
+  Jupiter: {
+    texture: "/textures/jupiter.jpg",
+    size: 9.0,
+    tilt: 3.1,
+    spin: 0.18,
+    atmosphere: [1.0, 0.85, 0.65],
+  },
+  Saturn: {
+    texture: "/textures/saturn.jpg",
+    size: 8.0,
+    tilt: 26.7,
+    spin: 0.16,
+    atmosphere: [1.0, 0.9, 0.65],
+    ring: {
+      innerScale: 1.35,
+      outerScale: 2.3,
+      texture: "/textures/saturn_rings.jpg",
+    },
+  },
+  Uranus: {
+    texture: "/textures/uranus.jpg",
+    size: 6.2,
+    tilt: 97.8,
+    spin: 0.12,
+    atmosphere: [0.7, 0.95, 1.0],
+  },
+  Neptune: {
+    texture: "/textures/neptune.jpg",
+    size: 6.0,
+    tilt: 28.3,
+    spin: 0.13,
+    atmosphere: [0.5, 0.7, 1.0],
+  },
 };
 
 const VS = /* glsl */ `
+varying vec3 vNormal;
+varying vec3 vWorldPos;
 varying vec2 vUv;
 void main() {
+  vNormal = normalize(normalMatrix * normal);
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
   vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;
 
 const FS = /* glsl */ `
 precision highp float;
+varying vec3 vNormal;
+varying vec3 vWorldPos;
 varying vec2 vUv;
 
-uniform vec3 uBase;
-uniform vec3 uHigh;
-uniform vec2 uLightDir; // 2D projected direction toward the Sun in the billboard plane
-uniform float uPhase;   // 0=new, 1=full
-
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float vnoise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1,0)), f.x),
-             mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
-}
+uniform sampler2D uTex;
+uniform vec3 uSunWorld;
+uniform vec3 uAtmo;
+uniform float uHasAtmo;
+uniform float uEmissive;
 
 void main() {
-  vec2 p = vUv * 2.0 - 1.0;
-  float r2 = dot(p, p);
-  if (r2 > 1.0) discard;
+  vec3 albedo = texture2D(uTex, vUv).rgb;
+  vec3 N = normalize(vNormal);
+  vec3 L = normalize(uSunWorld - vWorldPos);
 
-  // Reconstruct sphere normal from billboard uv (orthographic projection of unit sphere).
-  vec3 n = vec3(p, sqrt(max(0.0, 1.0 - r2)));
+  float ndl = max(dot(N, L), 0.0);
+  // Wrapped Lambert so the terminator isn't pitch black.
+  float wrap = (ndl + 0.15) / 1.15;
+  wrap = clamp(wrap, 0.0, 1.0);
 
-  // Lambert with light direction in screen space.
-  vec3 L = normalize(vec3(uLightDir, 0.4));
-  float ndl = max(dot(n, L), 0.0);
-  // Phase-bias the lighting so we don't see a fully lit disc when phase is small.
-  ndl = mix(ndl * 0.15, ndl, smoothstep(0.0, 1.0, uPhase));
+  vec3 lit = albedo * (wrap * 1.05 + uEmissive);
 
-  // Limb darkening.
-  float limb = pow(n.z, 0.45);
+  // Rim: soft blue/atmospheric halo on the day side limb.
+  if (uHasAtmo > 0.5) {
+    vec3 V = normalize(cameraPosition - vWorldPos);
+    float fres = pow(1.0 - max(dot(V, N), 0.0), 2.5);
+    float lobe = pow(max(dot(N, L), 0.0), 0.5);
+    lit += uAtmo * fres * lobe * 0.6;
+  }
 
-  // Surface mottling so it isn't a flat colored disc.
-  float mottle = vnoise(vUv * 9.0) * 0.5 + vnoise(vUv * 24.0) * 0.5;
-  vec3 albedo = mix(uBase, uHigh, mottle);
+  gl_FragColor = vec4(lit, 1.0);
+}
+`;
 
-  vec3 col = albedo * (0.05 + ndl * 0.95) * limb;
-
-  // Anti-aliased disc edge.
-  float edge = smoothstep(1.0, 0.96, sqrt(r2));
-  gl_FragColor = vec4(col, edge);
+const RING_VS = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vWorldPos;
+void main() {
+  vUv = uv;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
+  gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;
 
 const RING_FS = /* glsl */ `
 precision highp float;
 varying vec2 vUv;
-uniform vec3 uColor;
+varying vec3 vWorldPos;
+uniform sampler2D uTex;
+uniform vec3 uSunWorld;
+uniform vec3 uPlanetWorld;
+uniform float uInner;
+uniform float uOuter;
+
 void main() {
   vec2 p = vUv * 2.0 - 1.0;
   float r = length(p);
-  // Saturn-ish ring shape.
-  float a = smoothstep(0.55, 0.6, r) * smoothstep(1.0, 0.95, r);
-  // Cassini-ish gap.
-  a *= smoothstep(0.78, 0.79, abs(r - 0.79));
-  if (a < 0.01) discard;
-  gl_FragColor = vec4(uColor * 1.4, a);
+  float ringT = (r - uInner) / (uOuter - uInner);
+  if (ringT < 0.0 || ringT > 1.0) discard;
+  vec4 t = texture2D(uTex, vec2(ringT, 0.5));
+  // Lighting: dim the side of the ring that the planet shadows from the Sun.
+  vec3 sunDir = normalize(uSunWorld - uPlanetWorld);
+  vec3 ringPoint = vWorldPos - uPlanetWorld;
+  float side = dot(normalize(ringPoint), sunDir);
+  float shade = mix(0.45, 1.0, smoothstep(-0.2, 0.2, side));
+  gl_FragColor = vec4(t.rgb * shade, t.a * 0.95);
 }
 `;
 
@@ -138,97 +190,106 @@ interface PlanetProps {
 
 function Planet({ id, ra, dec, dist, vec, sunVec, style, onPick }: PlanetProps) {
   const groupRef = useRef<Group>(null);
+  const sphereRef = useRef<Mesh>(null);
+  const tex = useLoader(TextureLoader, style.texture);
+  const ringTex = useLoader(TextureLoader, style.ring?.texture ?? "/textures/saturn_rings.jpg");
+
   const { material, ringMaterial } = useMemo(() => {
-    // Sun direction relative to planet, then projected to camera space inside <useFrame>.
-    const sunDir = sunVec.clone().sub(vec).normalize();
-    // Phase: how much of the planet's facing hemisphere is illuminated, from
-    // the camera at origin. cos(phase angle) where phase angle is (planet→Sun)·(planet→Earth).
-    const toEarth = vec.clone().multiplyScalar(-1).normalize();
-    const ph = Math.max(0, sunDir.dot(toEarth)) * 0.5 + 0.5;
+    tex.colorSpace = SRGBColorSpace;
+    tex.anisotropy = 8;
+    if (style.ring) {
+      ringTex.colorSpace = SRGBColorSpace;
+      ringTex.wrapS = RepeatWrapping;
+      ringTex.wrapT = RepeatWrapping;
+      ringTex.anisotropy = 8;
+    }
     const mat = new ShaderMaterial({
       vertexShader: VS,
       fragmentShader: FS,
-      transparent: true,
-      depthWrite: false,
-      depthTest: false,
-      side: DoubleSide,
-      toneMapped: true,
       uniforms: {
-        uBase: { value: new Color(...style.base) },
-        uHigh: { value: new Color(...style.highlight) },
-        uLightDir: { value: [1, 0] },
-        uPhase: { value: ph },
+        uTex: { value: tex },
+        uSunWorld: { value: sunVec.clone() },
+        uAtmo: {
+          value: style.atmosphere
+            ? new Color(style.atmosphere[0], style.atmosphere[1], style.atmosphere[2])
+            : new Color(0, 0, 0),
+        },
+        uHasAtmo: { value: style.atmosphere ? 1 : 0 },
+        uEmissive: { value: style.emissive ?? 0.0 },
       },
+      toneMapped: true,
     });
-    let ringMat: ShaderMaterial | null = null;
-    if (style.hasRing) {
-      ringMat = new ShaderMaterial({
-        vertexShader: VS,
+    let rMat: ShaderMaterial | null = null;
+    if (style.ring) {
+      rMat = new ShaderMaterial({
+        vertexShader: RING_VS,
         fragmentShader: RING_FS,
         transparent: true,
         depthWrite: false,
-        depthTest: false,
         side: DoubleSide,
         toneMapped: true,
         uniforms: {
-          uColor: { value: new Color(...(style.ringColor ?? [1, 1, 1])) },
+          uTex: { value: ringTex },
+          uSunWorld: { value: sunVec.clone() },
+          uPlanetWorld: { value: vec.clone() },
+          uInner: { value: 0.45 },
+          uOuter: { value: 1.0 },
         },
       });
     }
-    return { material: mat, ringMaterial: ringMat };
-  }, [vec, sunVec, style]);
+    return { material: mat, ringMaterial: rMat };
+  }, [tex, ringTex, style, sunVec, vec]);
 
   useFrame((state) => {
-    if (!groupRef.current) return;
-    groupRef.current.lookAt(state.camera.position);
-    // Project the world Sun-direction into the billboard's local x/y so the
-    // shader can light the disc consistently as the camera moves.
-    const sunDir = sunVec.clone().sub(vec).normalize();
-    const cam = state.camera;
-    const right = new Vector3();
-    const up = new Vector3();
-    cam.matrixWorld.extractBasis(right, up, new Vector3());
-    const lx = sunDir.dot(right);
-    const ly = sunDir.dot(up);
-    material.uniforms.uLightDir.value = [lx, ly];
+    if (sphereRef.current) {
+      sphereRef.current.rotation.y += style.spin * (1 / 60);
+    }
+    material.uniforms.uSunWorld.value = sunVec;
+    if (ringMaterial) {
+      ringMaterial.uniforms.uSunWorld.value = sunVec;
+      ringMaterial.uniforms.uPlanetWorld.value = vec;
+    }
+    void state;
   });
 
   return (
     <group
       ref={groupRef}
       position={[vec.x, vec.y, vec.z]}
+      rotation={[0, 0, (style.tilt * Math.PI) / 180]}
       onClick={(e) => {
         e.stopPropagation();
         onPick(id, ra, dec, dist);
       }}
     >
-      {ringMaterial && (
-        <mesh rotation={[Math.PI * 0.18, 0.4, 0]} renderOrder={2}>
-          <planeGeometry args={[style.size * 4.4, style.size * 4.4]} />
+      <mesh ref={sphereRef}>
+        <sphereGeometry args={[style.size, 64, 64]} />
+        <primitive object={material} attach="material" />
+      </mesh>
+      {style.ring && ringMaterial && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[style.size * style.ring.innerScale, style.size * style.ring.outerScale, 96]} />
           <primitive object={ringMaterial} attach="material" />
         </mesh>
       )}
-      <mesh renderOrder={3}>
-        <planeGeometry args={[style.size * 2.4, style.size * 2.4]} />
-        <primitive object={material} attach="material" />
-      </mesh>
-      {/* Subtle HDR halo for the brighter planets so bloom kisses them. */}
-      <mesh renderOrder={1}>
-        <planeGeometry args={[style.size * 6, style.size * 6]} />
-        <shaderMaterial
-          transparent
-          depthWrite={false}
-          depthTest={false}
-          toneMapped
-          uniforms={{
-            uTint: {
-              value: new Color(style.highlight[0], style.highlight[1], style.highlight[2]),
-            },
-          }}
-          vertexShader={VS}
-          fragmentShader={`precision highp float;\nvarying vec2 vUv;\nuniform vec3 uTint;\nvoid main(){vec2 p=vUv*2.0-1.0;float r=length(p);if(r>1.0)discard;float a=pow(1.0-r,4.0)*0.45;gl_FragColor=vec4(uTint*1.6, a);}`}
-        />
-      </mesh>
+      {style.atmosphere && (
+        <mesh>
+          <sphereGeometry args={[style.size * 1.06, 32, 32]} />
+          <shaderMaterial
+            transparent
+            depthWrite={false}
+            blending={AdditiveBlending}
+            toneMapped
+            uniforms={{
+              uAtmo: {
+                value: new Color(style.atmosphere[0], style.atmosphere[1], style.atmosphere[2]),
+              },
+            }}
+            vertexShader={`varying vec3 vN; varying vec3 vW; void main(){vN=normalize(normalMatrix*normal); vec4 wp=modelMatrix*vec4(position,1.0); vW=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp;}`}
+            fragmentShader={`precision highp float; varying vec3 vN; varying vec3 vW; uniform vec3 uAtmo; void main(){ vec3 V=normalize(cameraPosition-vW); float f=pow(1.0-max(dot(V,vN),0.0),3.0); gl_FragColor=vec4(uAtmo*f*1.6,f);} `}
+          />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -271,19 +332,23 @@ export function Planets() {
 
   return (
     <group>
-      {positions.map((p) => (
-        <Planet
-          key={p.id}
-          id={p.id}
-          ra={p.ra}
-          dec={p.dec}
-          dist={p.dist}
-          vec={p.vec}
-          sunVec={sunVec}
-          style={PLANET_STYLE[p.id]}
-          onPick={onPick}
-        />
-      ))}
+      {positions.map((p) => {
+        const style = PLANET_STYLE[p.id as Exclude<PlanetId, "Sun">];
+        if (!style) return null;
+        return (
+          <Planet
+            key={p.id}
+            id={p.id}
+            ra={p.ra}
+            dec={p.dec}
+            dist={p.dist}
+            vec={p.vec}
+            sunVec={sunVec}
+            style={style}
+            onPick={onPick}
+          />
+        );
+      })}
     </group>
   );
 }

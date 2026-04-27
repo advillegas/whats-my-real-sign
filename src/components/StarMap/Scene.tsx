@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { ACESFilmicToneMapping, SRGBColorSpace } from "three";
 import { EffectComposer, Bloom, Vignette, SMAA } from "@react-three/postprocessing";
@@ -39,7 +39,7 @@ export function Scene() {
         alpha: false,
         powerPreference: "high-performance",
         toneMapping: ACESFilmicToneMapping,
-        toneMappingExposure: 1.0,
+        toneMappingExposure: 1.05,
         outputColorSpace: SRGBColorSpace,
       }}
       camera={{ fov: 55, near: 0.1, far: 5000, position: [0, 0, 0] }}
@@ -47,24 +47,30 @@ export function Scene() {
       style={{ position: "fixed", inset: 0, background: "black", touchAction: "none" }}
     >
       <CameraRig />
-      <MilkyWay />
+      <Suspense fallback={null}>
+        <MilkyWay />
+      </Suspense>
       {stars && <Stars stars={stars} />}
       <ConstellationBoundaries />
       <ConstellationLines />
       <ConstellationLabels />
       <DeepSkyObjects />
-      <Sun />
-      <Planets />
+      <Suspense fallback={null}>
+        <Sun />
+      </Suspense>
+      <Suspense fallback={null}>
+        <Planets />
+      </Suspense>
       {stars && dso && <Picker stars={stars} dso={dso} />}
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
-          intensity={1.4}
-          luminanceThreshold={0.18}
-          luminanceSmoothing={0.5}
+          intensity={1.05}
+          luminanceThreshold={0.55}
+          luminanceSmoothing={0.4}
           mipmapBlur
-          radius={0.85}
+          radius={0.78}
         />
-        <Vignette eskil={false} offset={0.18} darkness={0.65} />
+        <Vignette eskil={false} offset={0.2} darkness={0.55} />
         <SMAA />
       </EffectComposer>
     </Canvas>

@@ -73,6 +73,28 @@ export default function Home() {
           <LayerToggles />
         </div>
       </div>
+
+      <div className="absolute bottom-1 inset-x-0 text-center text-[10px] text-white/30 pointer-events-none z-0">
+        Milky Way panorama:{" "}
+        <a
+          href="https://www.eso.org/public/images/eso0932a/"
+          className="underline pointer-events-auto"
+          target="_blank"
+          rel="noreferrer"
+        >
+          ESO/S. Brunier
+        </a>{" "}
+        · Planet textures:{" "}
+        <a
+          href="https://www.solarsystemscope.com/textures/"
+          className="underline pointer-events-auto"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Solar System Scope
+        </a>{" "}
+        (CC BY 4.0)
+      </div>
     </div>
   );
 }

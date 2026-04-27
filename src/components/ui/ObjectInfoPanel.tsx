@@ -28,6 +28,7 @@ import {
   formatDistance,
   formatRA,
   pcToLightYears,
+  wikiCandidates,
 } from "@/lib/object-info";
 import { raDecToAltAz } from "@/lib/astronomy";
 
@@ -73,12 +74,17 @@ export function ObjectInfoPanel() {
 
   useEffect(() => {
     setWiki(null);
-    if (!selected?.wikiTitle) return;
+    if (!selected || !selected.wikiTitle) return;
+    const candidates = wikiCandidates(
+      selected.kind,
+      selected.wikiTitle,
+      selected.record as StarRecord | DsoRecord | null | undefined,
+    );
+    if (candidates.length === 0) return;
     setLoading(true);
     const ctrl = new AbortController();
-    fetch(`/api/wiki?title=${encodeURIComponent(selected.wikiTitle)}`, {
-      signal: ctrl.signal,
-    })
+    const param = candidates.map(encodeURIComponent).join("|");
+    fetch(`/api/wiki?titles=${param}`, { signal: ctrl.signal })
       .then(async (r) => (r.ok ? ((await r.json()) as WikiSummary) : null))
       .then((d) => setWiki(d))
       .catch(() => {
@@ -86,7 +92,7 @@ export function ObjectInfoPanel() {
       })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [selected?.wikiTitle]);
+  }, [selected]);
 
   useEffect(() => {
     setDsoThumb(null);
@@ -309,10 +315,21 @@ export function ObjectInfoPanel() {
               className="rounded-lg max-h-32 object-cover w-full"
             />
           )}
-          <div className="text-[12px] sm:text-[13px] text-white/85 leading-relaxed min-h-[1rem]">
-            {loading
-              ? "Looking up Wikipedia summary..."
-              : wiki?.extract ?? selected.blurb ?? ""}
+          <div className="text-[12px] sm:text-[13px] text-white/85 leading-relaxed min-h-[1rem] flex flex-col gap-2">
+            {loading ? (
+              <span className="text-white/55 italic">Looking up Wikipedia summary…</span>
+            ) : (
+              (wiki?.extract ?? selected.blurb ?? "")
+                .split(/\n+/)
+                .map((p) => p.trim())
+                .filter(Boolean)
+                .map((p, i) => <p key={i}>{p}</p>)
+            )}
+            {!loading && !wiki && !selected.blurb && (
+              <span className="text-white/45 italic">
+                No Wikipedia summary available.
+              </span>
+            )}
           </div>
           {wiki?.content_urls?.desktop?.page && (
             <a

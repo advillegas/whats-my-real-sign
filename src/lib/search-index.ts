@@ -29,6 +29,8 @@ export interface SearchEntry {
   wikiTitle?: string;
   /** Lowercase whitespace-collapsed alternates for matching. */
   aliases: string[];
+  /** Underlying catalog record for the info panel (stars and DSOs). */
+  record?: StarRecord | DsoRecord;
 }
 
 const GREEK_LATIN_TO_UNICODE: Record<string, string> = {
@@ -164,6 +166,7 @@ export function buildSearchIndex(
       kind: "star",
       wikiTitle: s.name,
       aliases,
+      record: s,
     });
   }
 
@@ -180,6 +183,7 @@ export function buildSearchIndex(
       kind: "dso",
       wikiTitle: d.m ? `Messier ${d.m}` : d.name ?? d.id,
       aliases,
+      record: d,
     });
   }
 

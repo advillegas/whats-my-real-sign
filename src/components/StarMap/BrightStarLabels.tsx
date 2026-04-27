@@ -22,6 +22,22 @@ import { starBlurb } from "@/lib/object-info";
 const BRIGHT_MAG_LIMIT = 2.6;
 const FADE_IN_FOV = 70;
 const FADE_OUT_FOV = 18;
+/**
+ * A few named stars sit just outside the BRIGHT_MAG_LIMIT cut but are
+ * navigationally / culturally critical (Polaris, Mira, etc.). We pin them to
+ * the label set explicitly.
+ */
+const ALWAYS_LABEL_NAMES = new Set<string>([
+  "Polaris",
+  "Mira",
+  "Thuban",
+  "Albireo",
+  "Alcor",
+  "Alcyone",
+  "Sheliak",
+  "Etamin",
+  "Megrez",
+]);
 
 interface LabelProps {
   star: StarRecord;
@@ -159,7 +175,11 @@ export function BrightStarLabels() {
 
   if (!stars || !visible) return null;
 
-  const named = stars.filter((s) => !!s.name && s.mag <= BRIGHT_MAG_LIMIT);
+  const named = stars.filter(
+    (s) =>
+      !!s.name &&
+      (s.mag <= BRIGHT_MAG_LIMIT || ALWAYS_LABEL_NAMES.has(s.name)),
+  );
   const tmp = new Vector3();
   return (
     <group>

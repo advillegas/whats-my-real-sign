@@ -181,3 +181,71 @@ export function formatDistance(distPc: number): string {
   }
   return `${distPc.toFixed(1)} pc (${ly.toFixed(0)} ly)`;
 }
+
+/**
+ * Build the ordered list of Wikipedia titles to attempt for a selected
+ * astronomical object. The list is sent to `/api/wiki?titles=...` which
+ * tries each in order and skips disambiguation pages, so the *first valid
+ * astronomical article* wins.
+ *
+ * Examples:
+ *   star "Castor"          → ["Castor (star)", "Castor"]
+ *   constellation "Cancer" → ["Cancer (constellation)", "Cancer"]
+ *   constellation "Leo"    → ["Leo (constellation)", "Leo"]
+ *   planet "Mercury"       → ["Mercury (planet)", "Mercury"]
+ *   DSO record M31         → ["Messier 31", "Andromeda Galaxy", "NGC 224"]
+ */
+export function wikiCandidates(
+  kind: "star" | "planet" | "dso" | "constellation",
+  title: string | undefined,
+  record?: StarRecord | DsoRecord | null,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (s?: string | null) => {
+    if (!s) return;
+    const t = s.trim();
+    if (!t) return;
+    const k = t.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(t);
+  };
+
+  if (kind === "constellation" && title) {
+    push(`${title} (constellation)`);
+    push(title);
+  } else if (kind === "star") {
+    const s = record as StarRecord | undefined;
+    if (title) {
+      push(`${title} (star)`);
+      push(title);
+    }
+    if (s) {
+      const { bayer } = expandBayerFlamsteed(s.bf);
+      if (bayer && s.con) {
+        const conFull = constellationFullName(s.con);
+        if (conFull) push(`${bayer.split(" ")[0]} ${conFull}`);
+      }
+      if (s.hr) push(`HR ${s.hr}`);
+      if (s.hd) push(`HD ${s.hd}`);
+      if (s.hip) push(`HIP ${s.hip}`);
+      if (s.gl) push(s.gl);
+    }
+  } else if (kind === "planet" && title) {
+    push(`${title} (planet)`);
+    push(title);
+  } else if (kind === "dso") {
+    const d = record as DsoRecord | undefined;
+    if (d?.m) push(`Messier ${d.m}`);
+    if (d?.commonNames) for (const n of d.commonNames) push(n);
+    if (d?.name && d.name !== d.id) push(d.name);
+    if (d?.ngc) push(`NGC ${d.ngc}`);
+    if (d?.ic) push(`IC ${d.ic}`);
+    if (title) push(title);
+  } else if (title) {
+    push(title);
+  }
+
+  return out;
+}

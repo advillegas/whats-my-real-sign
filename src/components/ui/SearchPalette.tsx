@@ -74,6 +74,7 @@ export function SearchPalette() {
       dec,
       kind: entry.kind,
       wikiTitle: entry.wikiTitle,
+      record: entry.record,
     });
     markInteracted();
     setOpen(false);

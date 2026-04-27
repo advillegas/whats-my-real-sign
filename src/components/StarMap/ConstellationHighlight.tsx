@@ -22,9 +22,7 @@ import {
 } from "@/lib/coordinates";
 import {
   loadBoundaries,
-  loadMeta,
   type ConstellationBoundary,
-  type ConstellationMeta,
 } from "@/lib/constellations";
 import { loadConstellationLines, type StarRecord } from "@/lib/catalogs";
 import { useViewer, selectHighlightedConDesig } from "@/store/viewer-store";
@@ -110,16 +108,14 @@ export function ConstellationHighlight({ stars }: Props) {
 
   const [lines, setLines] = useState<LineFeature[] | null>(null);
   const [bounds, setBounds] = useState<ConstellationBoundary[] | null>(null);
-  const [meta, setMeta] = useState<ConstellationMeta[] | null>(null);
 
   useEffect(() => {
     let alive = true;
-    Promise.all([loadConstellationLines(), loadBoundaries(), loadMeta()]).then(
-      ([l, b, m]) => {
+    Promise.all([loadConstellationLines(), loadBoundaries()]).then(
+      ([l, b]) => {
         if (!alive) return;
         setLines(l);
         setBounds(b);
-        setMeta(m);
       },
     );
     return () => {
@@ -190,11 +186,6 @@ export function ConstellationHighlight({ stars }: Props) {
     list.sort((a, b) => a.mag - b.mag);
     return list.slice(0, 14);
   }, [desig, stars]);
-
-  const conName = useMemo(() => {
-    if (!desig || !meta) return null;
-    return meta.find((m) => m.desig === desig)?.name ?? desig;
-  }, [desig, meta]);
 
   if (!highlight) return null;
 
@@ -286,44 +277,6 @@ export function ConstellationHighlight({ stars }: Props) {
         );
       })}
 
-      {/* Constellation name banner */}
-      {conName && meta && (() => {
-        const m = meta.find((x) => x.desig === desig);
-        if (!m) return null;
-        const pos = raDecHoursToVec3(m.ra, m.dec, CELESTIAL_RADIUS * 0.965, new Vector3());
-        return (
-          <group position={[pos.x, pos.y, pos.z]}>
-            <Html
-              center
-              zIndexRange={[7, 0]}
-              style={{ pointerEvents: "none", transform: "translate(0, 18px)" }}
-            >
-              <div
-                style={{
-                  fontFamily: "var(--font-sans, system-ui)",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  letterSpacing: "0.32em",
-                  textTransform: "uppercase",
-                  color: "rgba(255, 240, 200, 0.95)",
-                  textShadow:
-                    "0 0 12px rgba(255, 200, 120, 0.7), 0 0 4px rgba(0,0,0,0.95)",
-                  background: "rgba(20, 14, 6, 0.45)",
-                  border: "1px solid rgba(255, 210, 130, 0.35)",
-                  borderRadius: 999,
-                  padding: "3px 12px",
-                  whiteSpace: "nowrap",
-                  userSelect: "none",
-                  backdropFilter: "blur(6px)",
-                  WebkitBackdropFilter: "blur(6px)",
-                }}
-              >
-                {conName}
-              </div>
-            </Html>
-          </group>
-        );
-      })()}
     </group>
   );
 }

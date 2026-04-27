@@ -31,6 +31,12 @@ export function Picker({ stars, dso }: Props) {
   const downPos = useRef<{ x: number; y: number; t: number } | null>(null);
   const setSelected = useViewer((s) => s.setSelected);
   const setCameraTarget = useViewer((s) => s.setCameraTarget);
+  const tooltipsEnabledRef = useRef(true);
+  useEffect(() => {
+    return useViewer.subscribe((s) => {
+      tooltipsEnabledRef.current = s.tooltipsEnabled;
+    });
+  }, []);
   const boundsRef = useRef<ConstellationBoundary[] | null>(null);
   const metaRef = useRef<ConstellationMeta[] | null>(null);
 
@@ -88,31 +94,35 @@ export function Picker({ stars, dso }: Props) {
         if (useStar && bestStar && bestStar.angle < 0.012) {
           const s = bestStar.record;
           setCameraTarget(s.ra, s.dec, 25);
-          setSelected({
-            id: s.id,
-            name: s.name ?? s.bf ?? s.id,
-            ra: s.ra,
-            dec: s.dec,
-            kind: "star",
-            mag: s.mag,
-            wikiTitle: s.name,
-            blurb: starBlurb(s),
-          });
+          if (tooltipsEnabledRef.current) {
+            setSelected({
+              id: s.id,
+              name: s.name ?? s.bf ?? s.id,
+              ra: s.ra,
+              dec: s.dec,
+              kind: "star",
+              mag: s.mag,
+              wikiTitle: s.name,
+              blurb: starBlurb(s),
+            });
+          }
           return;
         }
         if (bestDso && bestDso.angle < 0.018) {
           const d = bestDso.record;
           setCameraTarget(d.ra, d.dec, 18);
-          setSelected({
-            id: d.id,
-            name: d.name ?? d.id,
-            ra: d.ra,
-            dec: d.dec,
-            kind: "dso",
-            mag: d.mag,
-            wikiTitle: d.m ? `Messier ${d.m}` : d.id,
-            blurb: dsoBlurb(d),
-          });
+          if (tooltipsEnabledRef.current) {
+            setSelected({
+              id: d.id,
+              name: d.name ?? d.id,
+              ra: d.ra,
+              dec: d.dec,
+              kind: "dso",
+              mag: d.mag,
+              wikiTitle: d.m ? `Messier ${d.m}` : d.id,
+              blurb: dsoBlurb(d),
+            });
+          }
           return;
         }
       }
@@ -127,6 +137,7 @@ export function Picker({ stars, dso }: Props) {
       const raDec = vecToRaDec(dir);
       const con = constellationAt(raDec.ra, raDec.dec, bounds);
       if (!con) return;
+      if (!tooltipsEnabledRef.current) return;
       const conMeta = meta.find((m) => m.desig === con.desig);
       const name = conMeta?.name ?? con.desig;
       setSelected({

@@ -61,12 +61,13 @@ export function LayerToggles() {
           </label>
         ))}
 
-        <div className="border-t border-white/10 mt-2 pt-2">
+        {/* Tooltip toggle is only useful on touch devices */}
+        <div className="border-t border-white/10 mt-2 pt-2 sm:hidden">
           <div className="text-[10px] uppercase tracking-[0.24em] text-blue-200/70 mb-1 px-1">
             Interaction
           </div>
           <label
-            className="flex items-center gap-2 px-1.5 py-2 sm:py-1 rounded hover:bg-white/5 active:bg-white/10 cursor-pointer select-none"
+            className="flex items-center gap-2 px-1.5 py-2 rounded hover:bg-white/5 active:bg-white/10 cursor-pointer select-none"
             title="Show floating labels and auto-open the description panel when hovering"
           >
             <input

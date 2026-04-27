@@ -12,28 +12,19 @@ import {
 } from "@/lib/constellations";
 import { useViewer } from "@/store/viewer-store";
 
-// IAU 2006 general precession in longitude (Lieske et al.) — ~50.29″/yr at J2000.
-// One full precession cycle (Platonic year) is ~25,772 years.
 const PRECESSION_RATE_ARCSEC_PER_YR = 50.29;
 const PRECESSION_PERIOD_YR = 25772;
-const YEARS_PER_DEGREE = 3600 / PRECESSION_RATE_ARCSEC_PER_YR; // ~71.58
-// Babylonian astronomers systematized the 12-sign tropical zodiac in the
-// 5th–4th century BCE; we anchor the "Babylonian baseline" at 500 BCE.
+const YEARS_PER_DEGREE = 3600 / PRECESSION_RATE_ARCSEC_PER_YR;
 const BABYLONIAN_REF_YEAR = -500;
-// Earth's mean obliquity of the ecliptic at J2000 (degrees).
 const OBLIQUITY_DEG = 23.44;
-// Equatorial bulge: Earth's equatorial radius minus its polar radius (km).
 const EQUATORIAL_BULGE_KM = 21.4;
 
 function fmtYearLabel(jsYear: number): string {
-  return jsYear >= 1
-    ? `${jsYear} CE`
-    : `${1 - jsYear} BCE`;
+  return jsYear >= 1 ? `${jsYear} CE` : `${1 - jsYear} BCE`;
 }
 
 export function SignReveal() {
   const date = useViewer((s) => s.date);
-  const hasInteracted = useViewer((s) => s.hasInteracted);
   const [bounds, setBounds] = useState<ConstellationBoundary[] | null>(null);
   const [open, setOpen] = useState(true);
   const [showWhy, setShowWhy] = useState(false);
@@ -49,9 +40,7 @@ export function SignReveal() {
   }, []);
 
   if (!bounds) return null;
-  // While the welcome overlay is showing, hide this card so the Sun stays
-  // unobstructed and the two messages don't compete for attention.
-  if (!hasInteracted) return null;
+
   const sun = sunSky(date);
   const real = constellationAt(sun.ra, sun.dec, bounds);
   const tropical = sun.eclipticLongitude
@@ -103,6 +92,12 @@ export function SignReveal() {
           <div className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-white pr-7">
             {realName}
           </div>
+
+          <p className="mt-1.5 text-[11px] sm:text-xs text-white/60 leading-relaxed">
+            Your real zodiac sign is the constellation positioned directly behind
+            the Sun on the day you were born.
+          </p>
+
           <div className="mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-white/70 leading-relaxed">
             {tropical && (
               <>

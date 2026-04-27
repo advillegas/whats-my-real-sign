@@ -143,7 +143,9 @@ export const useViewer = create<ViewerState>((set) => ({
   toggleTooltips: () =>
     set((s) => {
       const next = !s.tooltipsEnabled;
-      return next ? { tooltipsEnabled: next } : { tooltipsEnabled: next, hover: null };
+      return next
+        ? { tooltipsEnabled: next }
+        : { tooltipsEnabled: next, hover: null, selected: null };
     }),
 }));
 

@@ -14,6 +14,7 @@ interface WikiSummary {
 export function ObjectInfoPanel() {
   const selected = useViewer((s) => s.selected);
   const setSelected = useViewer((s) => s.setSelected);
+  const tooltipsEnabled = useViewer((s) => s.tooltipsEnabled);
   const [wiki, setWiki] = useState<WikiSummary | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -36,14 +37,14 @@ export function ObjectInfoPanel() {
 
   return (
     <AnimatePresence>
-      {selected && (
+      {selected && tooltipsEnabled && (
         <motion.aside
           key={selected.id}
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 40 }}
           transition={{ duration: 0.25 }}
-          className="glass fixed inset-x-2 bottom-20 sm:inset-x-auto sm:bottom-auto sm:top-24 sm:right-5 rounded-2xl p-4 sm:max-w-sm sm:w-[22rem] flex flex-col gap-3 z-40 max-h-[55vh] sm:max-h-[70vh] overflow-y-auto scrollbar-none safe-left safe-right shadow-2xl"
+          className="glass fixed inset-x-2 bottom-20 sm:inset-x-auto sm:left-auto sm:right-5 sm:bottom-[8.5rem] sm:top-auto rounded-2xl p-4 sm:max-w-sm sm:w-[22rem] flex flex-col gap-3 z-40 max-h-[55vh] sm:max-h-[45vh] overflow-y-auto scrollbar-none safe-left safe-right shadow-2xl"
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">

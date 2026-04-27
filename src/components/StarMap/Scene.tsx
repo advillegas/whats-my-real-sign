@@ -76,11 +76,11 @@ export function Scene() {
       {stars && dso && <Hover stars={stars} dso={dso} />}
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
-          intensity={isMobile ? 0.4 : 0.5}
-          luminanceThreshold={1.1}
-          luminanceSmoothing={0.2}
+          intensity={isMobile ? 0.45 : 0.55}
+          luminanceThreshold={0.95}
+          luminanceSmoothing={0.25}
           mipmapBlur
-          radius={isMobile ? 0.3 : 0.35}
+          radius={isMobile ? 0.3 : 0.4}
         />
         <Vignette eskil={false} offset={0.2} darkness={0.55} />
         <SMAA />{/* SMAA is cheap enough; mobile tuning happens via DPR + bloom radius */}

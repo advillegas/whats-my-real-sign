@@ -46,8 +46,8 @@ void main() {
   vec2 uv = vUv + vec2(uTime * 0.0015, 0.0);
   vec3 col = texture2D(uTex, uv).rgb;
   // Bias toward yellow-white & boost into HDR (kept moderate so bloom doesn't blanket the screen).
-  vec3 tint = vec3(1.18, 1.05, 0.82);
-  col = pow(col, vec3(0.9)) * tint * uIntensity;
+  vec3 tint = vec3(1.25, 1.10, 0.85);
+  col = pow(col, vec3(0.85)) * tint * uIntensity;
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -100,13 +100,12 @@ void main() {
   float falloff = pow(smoothstep(1.0, photoR, r), 4.0);
   float corona = falloff * streaks * coreCutoff * 0.85;
 
-  vec3 cInner = vec3(2.0, 1.5, 0.65);
-  vec3 cOuter = vec3(1.0, 0.45, 0.15);
+  vec3 cInner = vec3(2.8, 2.0, 0.85);
+  vec3 cOuter = vec3(1.4, 0.6, 0.2);
   vec3 col = mix(cInner, cOuter, smoothstep(photoR, 1.0, r)) * corona;
 
-  // Bright chromosphere rim right at the photosphere edge.
   float rim = pow(smoothstep(photoR + 0.03, photoR, r), 6.0) * coreCutoff;
-  col += vec3(2.4, 1.8, 1.0) * rim;
+  col += vec3(3.2, 2.4, 1.3) * rim;
 
   gl_FragColor = vec4(col, clamp(corona + rim, 0.0, 1.0));
 }
@@ -134,9 +133,9 @@ export function Sun() {
       uniforms: {
         uTex: { value: sunTex },
         uTime: { value: 0 },
-        uIntensity: { value: 2.6 },
+        uIntensity: { value: 5.5 },
       },
-      toneMapped: true,
+      toneMapped: false,
     });
     const cMat = new ShaderMaterial({
       vertexShader: CORONA_VS,
@@ -145,7 +144,7 @@ export function Sun() {
       depthWrite: false,
       depthTest: false,
       side: DoubleSide,
-      toneMapped: true,
+      toneMapped: false,
       uniforms: { uTime: { value: 0 } },
     });
     return { sky: sk, vec: v, surfaceMat: sMat, coronaMat: cMat };

@@ -11,7 +11,6 @@ import { ApodCard } from "@/components/ui/ApodCard";
 import { HelpHint } from "@/components/ui/HelpHint";
 import { HoverLabel } from "@/components/ui/HoverLabel";
 import { ZoomControls } from "@/components/ui/ZoomControls";
-import { WelcomeOverlay } from "@/components/ui/WelcomeOverlay";
 import { sunSky } from "@/lib/astronomy";
 import { useViewer } from "@/store/viewer-store";
 
@@ -36,11 +35,23 @@ function AimAtTodaysSun() {
   return null;
 }
 
+function MobileTooltipDefault() {
+  useEffect(() => {
+    const isMobile =
+      window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
+    if (isMobile && useViewer.getState().tooltipsEnabled) {
+      useViewer.getState().toggleTooltips();
+    }
+  }, []);
+  return null;
+}
+
 export default function Home() {
   return (
     <div className="fixed inset-0 overflow-hidden bg-black">
       <Scene />
       <AimAtTodaysSun />
+      <MobileTooltipDefault />
 
       <header className="absolute top-0 inset-x-0 px-3 pt-3 sm:px-5 sm:pt-5 safe-top safe-left safe-right flex items-start justify-between gap-3 pointer-events-none z-10">
         <div className="pointer-events-auto">
@@ -80,8 +91,6 @@ export default function Home() {
       </div>
 
       <HoverLabel />
-
-      <WelcomeOverlay />
 
       <div className="absolute bottom-0 inset-x-0 text-center text-[9px] sm:text-[10px] text-white/30 pointer-events-none z-0 hidden md:block px-2 pb-1 safe-bottom">
         Milky Way panorama:{" "}

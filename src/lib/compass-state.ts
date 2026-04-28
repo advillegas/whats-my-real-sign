@@ -36,14 +36,21 @@ export const compassState: {
    */
   yawOffsetRad: number;
   /**
-   * When true, negate `event.alpha` to convert a CW compass heading
-   * (Android Chrome's `deviceorientationabsolute` style) into the W3C
-   * CCW yaw the downstream math expects. Defaults on because the
-   * absolute-event convention is the common path on devices that don't
-   * expose `webkitCompassHeading`; iOS skips this flag entirely and
-   * uses webkitCompassHeading directly.
+   * Manual override for the rare device whose absolute-event alpha lies
+   * about its convention. Defaults off because the W3C spec literally
+   * defines alpha as "the opposite sense to a compass heading" (CCW from
+   * north), and every browser tested matches that on the absolute event.
+   * Toggled by the "Mirror sky" button in the AR overlay.
    */
   flipHorizontalAlpha: boolean;
+  /**
+   * Set true while AR mode is on but the device hasn't delivered a single
+   * absolute-orientation reading yet (no `deviceorientationabsolute` event
+   * with `e.absolute === true`, no `webkitCompassHeading`). The UI uses
+   * this to tell the user their browser/device can't do compass-anchored
+   * AR — e.g. desktop Chrome with no magnetometer.
+   */
+  needsAbsolute: boolean;
 } = {
   qx: 0,
   qy: 0,
@@ -52,5 +59,6 @@ export const compassState: {
   hasReading: false,
   lastUpdateMs: 0,
   yawOffsetRad: 0,
-  flipHorizontalAlpha: true,
+  flipHorizontalAlpha: false,
+  needsAbsolute: false,
 };

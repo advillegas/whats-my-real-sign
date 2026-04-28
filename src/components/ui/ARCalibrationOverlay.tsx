@@ -21,14 +21,17 @@ import { compassState } from "@/lib/compass-state";
 const HINT_KEY = "ar-calibration-hint-seen";
 // Bumped when the default convention flipped — so any stored "1" / "0" from
 // the old default doesn't override the new default for users who never
-// explicitly touched the toggle.
-const FLIP_KEY = "ar-flip-horizontal-v3";
-const FLIP_DEFAULT = true;
+// explicitly touched the toggle. v4 = the rewrite that only trusts absolute
+// orientation events and defaults the mirror to OFF (W3C alpha is already
+// CCW yaw, no negation needed).
+const FLIP_KEY = "ar-flip-horizontal-v4";
+const FLIP_DEFAULT = false;
 
 export function ARCalibrationOverlay() {
   const compassMode = useViewer((s) => s.compassMode);
   const [showHint, setShowHint] = useState(false);
   const [hasOffset, setHasOffset] = useState(false);
+  const [needsAbsolute, setNeedsAbsolute] = useState(false);
   // Mirror toggle — kept in component state so the button re-renders, plus
   // mirrored to compassState (read by the high-frequency event handler).
   const [flipped, setFlipped] = useState(FLIP_DEFAULT);
@@ -69,6 +72,14 @@ export function ARCalibrationOverlay() {
     if (!compassMode) return;
     const id = window.setInterval(() => {
       setHasOffset(Math.abs(compassState.yawOffsetRad) > 0.01);
+      // Only warn if we've been in AR for >1.5s with no absolute reading
+      // arriving — gives Android Chrome time to deliver its first
+      // `deviceorientationabsolute` event.
+      const stale =
+        compassState.needsAbsolute &&
+        !compassState.hasReading &&
+        performance.now() - compassState.lastUpdateMs > 1500;
+      setNeedsAbsolute(stale);
     }, 350);
     return () => window.clearInterval(id);
   }, [compassMode]);
@@ -89,13 +100,29 @@ export function ARCalibrationOverlay() {
 
   return (
     <>
-      {showHint && (
+      {needsAbsolute && (
+        <div
+          role="alert"
+          className="fixed left-1/2 -translate-x-1/2 bottom-32 sm:bottom-36 z-30 pointer-events-none px-3"
+        >
+          <div className="glass rounded-2xl px-4 py-3 text-[11px] sm:text-xs text-amber-100 shadow-lg max-w-[88vw] text-center leading-snug ring-1 ring-amber-300/40">
+            This device isn&apos;t reporting an absolute compass heading, so AR
+            mode can&apos;t anchor to true north.
+            <div className="mt-1 text-white/65 text-[10px]">
+              Try mobile Safari (iOS) or Chrome on Android — desktop browsers
+              and most laptops don&apos;t have a magnetometer.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showHint && !needsAbsolute && (
         <div
           role="status"
           className="fixed left-1/2 -translate-x-1/2 bottom-32 sm:bottom-36 z-30 pointer-events-none px-3"
         >
           <div className="glass rounded-2xl px-4 py-2.5 text-[11px] sm:text-xs text-white/90 shadow-lg max-w-[88vw] text-center leading-snug">
-            Drag horizontally to align the synthetic sky with what you see.
+            Drag horizontally to fine-tune the alignment with what you see.
             <div className="mt-1 text-white/55 text-[10px]">
               If turning the phone moves the sky the wrong way, tap “Mirror sky”.
             </div>

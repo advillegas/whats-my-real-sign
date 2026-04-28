@@ -69,35 +69,44 @@ export function CompassDriver() {
       const obs = state.observer;
       if (!obs) return;
 
-      // Source of truth for the heading angle. Three paths, in order of
-      // preference:
+      // Two trusted sources of absolute heading. Anything else gets dropped
+      // (it would be referenced to whatever direction the page was loaded
+      // in, which causes the famous "sun is on the opposite side of the
+      // sky" 180° bug — load the page facing south, alpha=0 means south
+      // even though the math assumes alpha=0 means north).
       //
-      //  1. `webkitCompassHeading` (iOS Safari) — degrees CW from magnetic
-      //     north, always referenced to a real compass. This is the only
-      //     reliable source on iOS, where `event.alpha` is referenced to
-      //     whatever orientation the page was *loaded in*. If the user
-      //     happened to be facing south at load, alpha=0 means south, the
-      //     pipeline thinks alpha=0 means north, and everything is 180°
-      //     off — sun on the opposite side of the sky, motion inverted,
-      //     user rage. webkitCompassHeading sidesteps the whole mess.
+      //  • iOS Safari → fires `deviceorientation` with `webkitCompassHeading`
+      //    set to degrees CW from magnetic north.
+      //  • Android Chrome / Edge → fires `deviceorientationabsolute` with
+      //    `e.absolute === true` and `e.alpha` already CCW from north
+      //    (W3C convention; the spec literally calls it "the opposite
+      //    sense to a compass heading").
       //
-      //  2. The `deviceorientationabsolute` event's `alpha` (modern
-      //     Android Chrome / Edge) — true-north-referenced, CW-heading
-      //     style. The flip flag converts to CCW yaw.
-      //
-      //  3. The plain `deviceorientation` event's `alpha` (everywhere
-      //     else) — convention varies, hence the toggle. Magnetic-vs-true
-      //     and load-orientation offsets get absorbed by the user's drag
-      //     calibration.
+      // Both events are subscribed to; the handler trusts whichever
+      // delivers absolute data and ignores the rest. The compass-state
+      // flip toggle remains as a manual override for the rare device
+      // that lies about its convention.
       const ext = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
-      let alpha = e.alpha;
-      let flipForReading = compassState.flipHorizontalAlpha;
-      if (
+      const hasWkHeading =
         typeof ext.webkitCompassHeading === "number" &&
-        Number.isFinite(ext.webkitCompassHeading)
-      ) {
-        alpha = -ext.webkitCompassHeading;
-        flipForReading = false;
+        Number.isFinite(ext.webkitCompassHeading);
+      const isAbsoluteEvent = e.absolute === true;
+
+      if (!hasWkHeading && !isAbsoluteEvent) {
+        compassState.needsAbsolute = true;
+        return;
+      }
+      compassState.needsAbsolute = false;
+
+      let alpha = e.alpha;
+      let flipForReading = false;
+      if (hasWkHeading) {
+        // iOS path: CW heading → CCW yaw.
+        alpha = -(ext.webkitCompassHeading as number);
+      } else {
+        // Android absolute path: alpha is already CCW yaw per W3C.
+        // Honour the manual mirror toggle for devices that lie.
+        flipForReading = compassState.flipHorizontalAlpha;
       }
 
       const target = buildArCameraQuat(
@@ -141,12 +150,20 @@ export function CompassDriver() {
       compassState.lastUpdateMs = performance.now();
     };
 
-    // Prefer the absolute (true-north-referenced) variant where it exists;
-    // fall back to the bare event everywhere else. Magnetic-vs-true-north
-    // and page-load offsets are absorbed by the user's drag calibration.
-    const useAbsolute = "ondeviceorientationabsolute" in window;
-    const eventName = useAbsolute ? "deviceorientationabsolute" : "deviceorientation";
-    window.addEventListener(eventName, handle as EventListener, true);
+    // Subscribe to BOTH events. The handler ignores whatever isn't
+    // absolute, so:
+    //   • iOS fires `deviceorientation` with `webkitCompassHeading`.
+    //   • Android Chrome fires `deviceorientationabsolute` with
+    //     `e.absolute === true`. (It also fires plain `deviceorientation`
+    //     with absolute=false, which the handler drops.)
+    //   • Devices that have neither path will set `needsAbsolute` and the
+    //     UI surfaces the warning.
+    window.addEventListener("deviceorientation", handle as EventListener, true);
+    window.addEventListener(
+      "deviceorientationabsolute",
+      handle as EventListener,
+      true,
+    );
 
     const sc = (window.screen as Screen & { orientation?: EventTarget })
       .orientation;
@@ -157,13 +174,23 @@ export function CompassDriver() {
     }
 
     return () => {
-      window.removeEventListener(eventName, handle as EventListener, true);
+      window.removeEventListener(
+        "deviceorientation",
+        handle as EventListener,
+        true,
+      );
+      window.removeEventListener(
+        "deviceorientationabsolute",
+        handle as EventListener,
+        true,
+      );
       if (sc && typeof sc.removeEventListener === "function") {
         sc.removeEventListener("change", onScreenChange);
       } else {
         window.removeEventListener("orientationchange", onScreenChange);
       }
       compassState.hasReading = false;
+      compassState.needsAbsolute = false;
     };
   }, [compassMode]);
 

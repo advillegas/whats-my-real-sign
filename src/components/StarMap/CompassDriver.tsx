@@ -69,9 +69,40 @@ export function CompassDriver() {
       const obs = state.observer;
       if (!obs) return;
 
+      // Source of truth for the heading angle. Three paths, in order of
+      // preference:
+      //
+      //  1. `webkitCompassHeading` (iOS Safari) — degrees CW from magnetic
+      //     north, always referenced to a real compass. This is the only
+      //     reliable source on iOS, where `event.alpha` is referenced to
+      //     whatever orientation the page was *loaded in*. If the user
+      //     happened to be facing south at load, alpha=0 means south, the
+      //     pipeline thinks alpha=0 means north, and everything is 180°
+      //     off — sun on the opposite side of the sky, motion inverted,
+      //     user rage. webkitCompassHeading sidesteps the whole mess.
+      //
+      //  2. The `deviceorientationabsolute` event's `alpha` (modern
+      //     Android Chrome / Edge) — true-north-referenced, CW-heading
+      //     style. The flip flag converts to CCW yaw.
+      //
+      //  3. The plain `deviceorientation` event's `alpha` (everywhere
+      //     else) — convention varies, hence the toggle. Magnetic-vs-true
+      //     and load-orientation offsets get absorbed by the user's drag
+      //     calibration.
+      const ext = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
+      let alpha = e.alpha;
+      let flipForReading = compassState.flipHorizontalAlpha;
+      if (
+        typeof ext.webkitCompassHeading === "number" &&
+        Number.isFinite(ext.webkitCompassHeading)
+      ) {
+        alpha = -ext.webkitCompassHeading;
+        flipForReading = false;
+      }
+
       const target = buildArCameraQuat(
         {
-          alpha: e.alpha,
+          alpha,
           beta: e.beta,
           gamma: e.gamma,
           screenAngle,
@@ -79,7 +110,7 @@ export function CompassDriver() {
           lonDeg: obs.lon,
           date: state.date,
           yawOffsetRad: compassState.yawOffsetRad,
-          flipHorizontalAlpha: compassState.flipHorizontalAlpha,
+          flipHorizontalAlpha: flipForReading,
         },
         _targetQ,
       );

@@ -22,8 +22,8 @@ const HINT_KEY = "ar-calibration-hint-seen";
 // Bumped when the default convention flipped — so any stored "1" / "0" from
 // the old default doesn't override the new default for users who never
 // explicitly touched the toggle.
-const FLIP_KEY = "ar-flip-horizontal-v2";
-const FLIP_DEFAULT = false;
+const FLIP_KEY = "ar-flip-horizontal-v3";
+const FLIP_DEFAULT = true;
 
 export function ARCalibrationOverlay() {
   const compassMode = useViewer((s) => s.compassMode);
